@@ -1,8 +1,8 @@
 /**
  * Medical Data Extraction Module
  *
- * Uses keyword-based extraction for reliable results
- * from consultation transcript
+ * Uses GPT-2 for structured medical data extraction
+ * Runs entirely in-browser via Transformers.js
  */
 
 import { pipeline, env } from '@huggingface/transformers';
@@ -13,17 +13,40 @@ env.useBrowserCache = true;
 
 export class MedicalExtractor {
   constructor() {
-    // Using keyword-based extraction for now - more reliable
+    // Use a model that actually works with Transformers.js
+    this.modelId = 'Xenova/distilgpt2';
+    this.generator = null;
     this.isInitialized = false;
   }
 
   async initialize() {
     if (this.isInitialized) return;
 
-    console.log('Initializing Medical Extractor...');
-    // No model needed for keyword extraction
-    this.isInitialized = true;
-    console.log('Medical Extractor initialized successfully');
+    console.log('Initializing Medical Extraction LLM...');
+
+    try {
+      // Load text generation pipeline
+      this.generator = await pipeline('text-generation', this.modelId, {
+        progress_callback: (progress) => {
+          if (progress.status === 'downloading') {
+            console.log(`[LLM] Downloading: ${progress.file} (${progress.progress.toFixed(1)}%)`);
+          } else if (progress.status === 'loading') {
+            console.log(`[LLM] Loading: ${progress.file}`);
+          } else if (progress.status === 'done') {
+            console.log(`[LLM] Model loaded successfully`);
+          }
+        },
+      });
+
+      this.isInitialized = true;
+      console.log('Medical Extraction LLM initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize LLM:', error);
+      // Fall back to keyword extraction if LLM fails
+      console.log('Falling back to keyword-based extraction');
+      this.isInitialized = true;
+      this.generator = null; // Will trigger keyword extraction
+    }
   }
 
   /**
@@ -39,53 +62,69 @@ export class MedicalExtractor {
     console.log('Extracting medical data...');
 
     try {
-      // Extract using keyword patterns
-      const medicalData = this.extractUsingKeywords(transcript);
-
-      console.log('Medical data extracted successfully');
-      return medicalData;
+      // If LLM is available, use it
+      if (this.generator) {
+        return await this.extractWithLLM(transcript);
+      }
+      // Otherwise use keyword extraction
+      return this.extractUsingKeywords(transcript);
     } catch (error) {
-      console.error('Extraction error:', error);
-      throw new Error(`Medical data extraction failed: ${error.message}`);
+      console.error('LLM extraction failed, using keywords:', error);
+      return this.extractUsingKeywords(transcript);
+    }
+  }
+
+  /**
+   * Extract using LLM
+   */
+  async extractWithLLM(transcript) {
+    const prompt = `Medical consultation: ${transcript.substring(0, 500)}\n\nSummary:`;
+
+    try {
+      const result = await this.generator(prompt, {
+        max_new_tokens: 150,
+        temperature: 0.7,
+        do_sample: true,
+        return_full_text: false,
+      });
+
+      const summary = result[0]?.generated_text || transcript;
+
+      return {
+        incident_record: transcript,
+        prescription: this.extractPrescription(transcript),
+        lab_recommendations: this.extractLabs(transcript),
+        radiology_recommendations: this.extractRadiology(transcript),
+        treatment_plan: summary.substring(0, 200),
+        diet_advice: this.extractDietAdvice(transcript),
+        summary: summary,
+      };
+    } catch (error) {
+      throw error;
     }
   }
 
   /**
    * Extract medical data using keyword patterns
-   * This is a simplified version that works reliably
    */
   extractUsingKeywords(transcript) {
     const text = transcript.toLowerCase();
 
-    // Extract medications
-    const prescription = this.extractPrescription(text);
-
-    // Extract lab recommendations
-    const lab_recommendations = this.extractLabs(text);
-
-    // Extract radiology recommendations
-    const radiology_recommendations = this.extractRadiology(text);
-
-    // Generate summary from transcript
-    const summary = transcript.length > 200
-      ? transcript.substring(0, 300) + '...'
-      : transcript;
-
     return {
       incident_record: transcript,
-      prescription,
-      lab_recommendations,
-      radiology_recommendations,
+      prescription: this.extractPrescription(text),
+      lab_recommendations: this.extractLabs(text),
+      radiology_recommendations: this.extractRadiology(text),
       treatment_plan: 'Follow-up recommended based on consultation.',
       diet_advice: this.extractDietAdvice(text),
-      summary,
+      summary: transcript.length > 200
+        ? transcript.substring(0, 300) + '...'
+        : transcript,
     };
   }
 
   extractPrescription(text) {
     const medications = [];
-
-    // Common medication patterns
     const medicationKeywords = [
       'paracetamol', 'ibuprofen', 'amoxicillin', 'azithromycin',
       'metformin', 'lisinopril', 'atorvastatin', 'omeprazole',
@@ -120,7 +159,7 @@ export class MedicalExtractor {
       }
     });
 
-    return labs.length > 0 ? labs : ['Complete Blood Count', 'Blood Sugar (Fasting)'];
+    return labs.length > 0 ? labs : ['Complete Blood Count'];
   }
 
   extractRadiology(text) {
@@ -152,11 +191,6 @@ export class MedicalExtractor {
       advice.push('Avoid processed foods');
     }
 
-    if (text.includes('weight') || text.includes('obese')) {
-      advice.push('Follow a balanced diet');
-      advice.push('Increase physical activity');
-    }
-
-    return advice.length > 0 ? advice : ['Maintain balanced diet', 'Stay hydrated'];
+    return advice.length > 0 ? advice : ['Maintain balanced diet'];
   }
 }
