@@ -14,6 +14,8 @@ export class MedicalExtractor {
     this.llm = null;
     this.useLLM = true;
     this.currentModel = 'LiquidAI/LFM2.5-1.2B-Instruct-ONNX';
+    this.maxDirectTranscriptChars = 6000;
+    this.maxChunkChars = 3200;
   }
 
   async initialize(onProgress, modelId = null) {
@@ -104,12 +106,7 @@ export class MedicalExtractor {
       } else {
         // Fallback to keyword extraction
         console.log('Using keyword extraction fallback...');
-        medicalData = this.extractUsingKeywords(transcript);
-
-        // Generate formatted markdown descriptions
-        medicalData.incident_record = this.generateIncidentMarkdown(transcript, medicalData);
-        medicalData.treatment_plan = this.generateTreatmentMarkdown(transcript, medicalData);
-        medicalData.summary = this.generateSummaryMarkdown(transcript, medicalData);
+        medicalData = this.extractExplicitFallback(transcript);
       }
 
       console.log('Medical data extracted successfully');
@@ -124,38 +121,63 @@ export class MedicalExtractor {
    * Extract medical data using LLM
    */
   async extractUsingLLM(transcript) {
+    if (this.shouldBatchTranscript(transcript)) {
+      return this.extractUsingBatchedLLM(transcript);
+    }
+
     const prompt = this.buildMedicalPrompt(transcript);
 
     try {
-      const response = await this.llm.generate(prompt, {
-        maxNewTokens: 2048,
-        temperature: 0.1
-      });
-
-      // Parse the JSON response
-      const medicalData = this.parseLLMResponse(response);
-
-      // Ensure all required fields exist
-      return {
-        incident_record: medicalData.incident_record || this.generateIncidentMarkdown(transcript, medicalData),
-        prescription: medicalData.prescription || [],
-        lab_recommendations: medicalData.lab_recommendations || [],
-        radiology_recommendations: medicalData.radiology_recommendations || [],
-        treatment_plan: medicalData.treatment_plan || this.generateTreatmentMarkdown(transcript, medicalData),
-        diet_advice: medicalData.diet_advice || [],
-        summary: medicalData.summary || this.generateSummaryMarkdown(transcript, medicalData)
-      };
+      return await this.generateStructuredMedicalData(prompt, transcript);
     } catch (error) {
       console.error('LLM extraction failed, falling back to keywords:', error);
       this.useLLM = false;
-      return this.extractUsingKeywords(transcript);
+      return this.extractExplicitFallback(transcript);
     }
+  }
+
+  async extractUsingBatchedLLM(transcript) {
+    console.log('Transcript exceeds direct context budget. Processing in batches...');
+
+    const chunks = this.chunkTranscript(transcript);
+    const partialResults = [];
+
+    for (const [index, chunk] of chunks.entries()) {
+      try {
+        const prompt = this.buildMedicalPrompt(
+          chunk,
+          `This is segment ${index + 1} of ${chunks.length} from a longer consultation. Extract only the facts explicitly present in this segment.`
+        );
+
+        const partial = await this.generateStructuredMedicalData(prompt, chunk, {
+          maxNewTokens: 1400,
+          allowExplicitFallback: true
+        });
+        partialResults.push(partial);
+      } catch (error) {
+        console.warn(`Chunk ${index + 1} extraction failed, using explicit transcript fallback for this segment:`, error);
+        partialResults.push(this.extractExplicitFallback(chunk));
+      }
+    }
+
+    const merged = this.mergePartialResults(partialResults);
+    const consolidated = await this.consolidateNarratives(partialResults, merged, transcript);
+
+    return {
+      incident_record: consolidated.incident_record || merged.incident_record || '',
+      prescription: merged.prescription || [],
+      lab_recommendations: merged.lab_recommendations || [],
+      radiology_recommendations: merged.radiology_recommendations || [],
+      treatment_plan: consolidated.treatment_plan || merged.treatment_plan || '',
+      diet_advice: merged.diet_advice || [],
+      summary: consolidated.summary || merged.summary || ''
+    };
   }
 
   /**
    * Build the medical extraction prompt
    */
-  buildMedicalPrompt(transcript) {
+  buildMedicalPrompt(transcript, additionalInstruction = '') {
     return `<|im_start|>system
 You are an expert medical consultation assistant. Extract structured medical information from the consultation transcript.
 
@@ -187,6 +209,7 @@ EXAMPLES:
 - For duration: use "5 days", "1 week", "2 weeks", "until completion"
 - For labs: use specific test names like "Complete Blood Count (CBC)", "Fasting Blood Sugar", "Lipid Profile"
 - For radiology: use specific studies like "Chest X-ray", "CT Scan abdomen", "MRI brain"
+${additionalInstruction ? `\nADDITIONAL INSTRUCTION:\n${additionalInstruction}` : ''}
 <|im_end|>
 <|im_start|>user
 Please analyze this medical consultation transcript and extract structured medical data:
@@ -195,6 +218,63 @@ TRANSCRIPT:
 ${transcript}
 
 Provide the extracted information as JSON following the structure above.
+<|im_end|>
+<|im_start|>assistant
+`;
+  }
+
+  buildConsolidationPrompt(partialResults) {
+    return `<|im_start|>system
+You are an expert medical documentation assistant. You will be given structured outputs extracted from multiple transcript segments of the same consultation.
+
+IMPORTANT RULES:
+1. Respond with valid JSON only
+2. Merge overlapping details into one coherent clinical note
+3. Do not invent facts that are not present in the partial extractions
+4. Write incident_record, treatment_plan, and summary as polished clinical prose
+
+JSON STRUCTURE REQUIRED:
+{
+  "incident_record": "",
+  "treatment_plan": "",
+  "summary": ""
+}
+<|im_end|>
+<|im_start|>user
+Combine the following partial consultation extractions into one coherent final narrative:
+
+${JSON.stringify(partialResults, null, 2)}
+<|im_end|>
+<|im_start|>assistant
+`;
+  }
+
+  buildRepairPrompt(rawResponse) {
+    return `<|im_start|>system
+You are a medical data extraction assistant. Convert the provided model output into valid JSON only.
+
+IMPORTANT RULES:
+1. Respond with valid JSON only
+2. If a field is missing, leave it as an empty string or empty array
+3. Do not add information that is not present in the supplied output
+
+JSON STRUCTURE REQUIRED:
+{
+  "incident_record": "",
+  "prescription": [
+    {"drug": "", "dose": "", "frequency": "", "duration": ""}
+  ],
+  "lab_recommendations": [],
+  "radiology_recommendations": [],
+  "treatment_plan": "",
+  "diet_advice": [],
+  "summary": ""
+}
+<|im_end|>
+<|im_start|>user
+Repair this model output into valid JSON:
+
+${rawResponse}
 <|im_end|>
 <|im_start|>assistant
 `;
@@ -225,6 +305,38 @@ Provide the extracted information as JSON following the structure above.
       console.log('Response was:', response);
       return {};
     }
+  }
+
+  async generateStructuredMedicalData(prompt, transcript, options = {}) {
+    const response = await this.llm.generate(prompt, {
+      maxNewTokens: options.maxNewTokens || 2048,
+      temperature: 0.1
+    });
+
+    let medicalData = this.parseLLMResponse(response);
+    if (this.isEmptyExtraction(medicalData)) {
+      medicalData = await this.repairStructuredMedicalData(response);
+    }
+
+    const fallbackData = options.allowExplicitFallback
+      ? this.extractExplicitFallback(transcript)
+      : null;
+
+    return {
+      incident_record: medicalData.incident_record || fallbackData?.incident_record || '',
+      prescription: medicalData.prescription || [],
+      lab_recommendations: (medicalData.lab_recommendations && medicalData.lab_recommendations.length > 0)
+        ? medicalData.lab_recommendations
+        : (fallbackData?.lab_recommendations || []),
+      radiology_recommendations: (medicalData.radiology_recommendations && medicalData.radiology_recommendations.length > 0)
+        ? medicalData.radiology_recommendations
+        : (fallbackData?.radiology_recommendations || []),
+      treatment_plan: medicalData.treatment_plan || fallbackData?.treatment_plan || '',
+      diet_advice: (medicalData.diet_advice && medicalData.diet_advice.length > 0)
+        ? medicalData.diet_advice
+        : (fallbackData?.diet_advice || []),
+      summary: medicalData.summary || fallbackData?.summary || ''
+    };
   }
 
   /**
@@ -265,6 +377,295 @@ Provide the extracted information as JSON following the structure above.
     if (Array.isArray(value)) return value;
     if (value === null || value === undefined) return [];
     return [value];
+  }
+
+  isEmptyExtraction(data) {
+    if (!data) return true;
+    return !data.incident_record &&
+      (!data.prescription || data.prescription.length === 0) &&
+      (!data.lab_recommendations || data.lab_recommendations.length === 0) &&
+      (!data.radiology_recommendations || data.radiology_recommendations.length === 0) &&
+      !data.treatment_plan &&
+      (!data.diet_advice || data.diet_advice.length === 0) &&
+      !data.summary;
+  }
+
+  async repairStructuredMedicalData(rawResponse) {
+    try {
+      const repairedResponse = await this.llm.generate(this.buildRepairPrompt(rawResponse), {
+        maxNewTokens: 1200,
+        temperature: 0.1
+      });
+      return this.parseLLMResponse(repairedResponse);
+    } catch (error) {
+      console.warn('Failed to repair malformed LLM response:', error);
+      return {};
+    }
+  }
+
+  shouldBatchTranscript(transcript) {
+    return transcript.length > this.maxDirectTranscriptChars;
+  }
+
+  chunkTranscript(transcript) {
+    const blocks = transcript
+      .split(/\n\s*\n/)
+      .map(block => block.trim())
+      .filter(Boolean);
+
+    const chunks = [];
+    let current = '';
+
+    for (const block of blocks) {
+      if (block.length > this.maxChunkChars) {
+        const smallerChunks = this.splitLargeBlock(block);
+        for (const smaller of smallerChunks) {
+          if (current) {
+            chunks.push(current.trim());
+            current = '';
+          }
+          chunks.push(smaller.trim());
+        }
+        continue;
+      }
+
+      const candidate = current ? `${current}\n\n${block}` : block;
+      if (candidate.length > this.maxChunkChars) {
+        chunks.push(current.trim());
+        current = block;
+      } else {
+        current = candidate;
+      }
+    }
+
+    if (current.trim()) {
+      chunks.push(current.trim());
+    }
+
+    return chunks.length > 0 ? chunks : this.splitLargeBlock(transcript);
+  }
+
+  splitLargeBlock(text) {
+    const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+    const chunks = [];
+    let current = '';
+
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim();
+      if (!trimmed) continue;
+
+      if (trimmed.length > this.maxChunkChars) {
+        if (current.trim()) {
+          chunks.push(current.trim());
+          current = '';
+        }
+
+        for (let start = 0; start < trimmed.length; start += this.maxChunkChars) {
+          chunks.push(trimmed.slice(start, start + this.maxChunkChars).trim());
+        }
+        continue;
+      }
+
+      const candidate = current ? `${current} ${trimmed}` : trimmed;
+      if (candidate.length > this.maxChunkChars) {
+        chunks.push(current.trim());
+        current = trimmed;
+      } else {
+        current = candidate;
+      }
+    }
+
+    if (current.trim()) {
+      chunks.push(current.trim());
+    }
+
+    return chunks.filter(Boolean);
+  }
+
+  mergePartialResults(partialResults) {
+    const merged = {
+      incident_record: '',
+      prescription: [],
+      lab_recommendations: [],
+      radiology_recommendations: [],
+      treatment_plan: '',
+      diet_advice: [],
+      summary: ''
+    };
+
+    const incidentSections = [];
+    const treatmentSections = [];
+    const summarySections = [];
+    const prescriptionKeys = new Set();
+
+    partialResults.forEach(partial => {
+      if (partial.incident_record) incidentSections.push(partial.incident_record);
+      if (partial.treatment_plan) treatmentSections.push(partial.treatment_plan);
+      if (partial.summary) summarySections.push(partial.summary);
+
+      (partial.prescription || []).forEach(med => {
+        const key = [
+          this.ensureString(med.drug).toLowerCase(),
+          this.ensureString(med.dose).toLowerCase(),
+          this.ensureString(med.frequency).toLowerCase(),
+          this.ensureString(med.duration).toLowerCase()
+        ].join('|');
+
+        if (!prescriptionKeys.has(key) && med.drug) {
+          prescriptionKeys.add(key);
+          merged.prescription.push({
+            drug: this.ensureString(med.drug),
+            dose: this.ensureString(med.dose),
+            frequency: this.ensureString(med.frequency),
+            duration: this.ensureString(med.duration)
+          });
+        }
+      });
+
+      merged.lab_recommendations = this.mergeUniqueStrings(merged.lab_recommendations, partial.lab_recommendations || []);
+      merged.radiology_recommendations = this.mergeUniqueStrings(merged.radiology_recommendations, partial.radiology_recommendations || []);
+      merged.diet_advice = this.mergeUniqueStrings(merged.diet_advice, partial.diet_advice || []);
+    });
+
+    merged.incident_record = this.combineNarrativeSections(incidentSections);
+    merged.treatment_plan = this.combineNarrativeSections(treatmentSections);
+    merged.summary = this.combineNarrativeSections(summarySections);
+
+    return merged;
+  }
+
+  async consolidateNarratives(partialResults, merged, transcript) {
+    if (!this.llm || partialResults.length <= 1) {
+      return {
+        incident_record: merged.incident_record,
+        treatment_plan: merged.treatment_plan,
+        summary: merged.summary
+      };
+    }
+
+    try {
+      const response = await this.llm.generate(this.buildConsolidationPrompt(partialResults), {
+        maxNewTokens: 1400,
+        temperature: 0.1
+      });
+
+      const consolidated = this.parseLLMResponse(response);
+      return {
+        incident_record: consolidated.incident_record || merged.incident_record || '',
+        treatment_plan: consolidated.treatment_plan || merged.treatment_plan || '',
+        summary: consolidated.summary || merged.summary || ''
+      };
+    } catch (error) {
+      console.warn('Narrative consolidation failed, using merged partial narratives:', error);
+      return {
+        incident_record: merged.incident_record || '',
+        treatment_plan: merged.treatment_plan || '',
+        summary: merged.summary || ''
+      };
+    }
+  }
+
+  mergeUniqueStrings(existing, incoming) {
+    const map = new Map(existing.map(item => [item.toLowerCase(), item]));
+    incoming.forEach(item => {
+      const value = this.ensureString(item);
+      if (!value) return;
+      const key = value.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, value);
+      }
+    });
+    return [...map.values()];
+  }
+
+  combineNarrativeSections(sections) {
+    const uniqueSections = this.mergeUniqueStrings([], sections);
+    return uniqueSections.join('\n\n');
+  }
+
+  extractExplicitFallback(transcript) {
+    const text = transcript.toLowerCase();
+    return {
+      incident_record: this.extractExplicitNarrative(transcript, [
+        'complain', 'complains', 'presents', 'history', 'reports', 'pain', 'fever', 'cough'
+      ]) || transcript.trim(),
+      prescription: this.extractPrescriptionFromTranscript(transcript),
+      lab_recommendations: this.extractLabs(text),
+      radiology_recommendations: this.extractRadiology(text),
+      treatment_plan: this.extractExplicitNarrative(transcript, [
+        'prescribed', 'advised', 'recommended', 'started on', 'take', 'plan', 'follow'
+      ]),
+      diet_advice: this.extractDietAdviceFromTranscript(transcript),
+      summary: this.extractExplicitNarrative(transcript, [
+        'assessment', 'diagnosis', 'impression', 'plan', 'recommended'
+      ]) || transcript.trim()
+    };
+  }
+
+  extractExplicitNarrative(text, keywords) {
+    const sentences = text
+      .split(/(?<=[.!?])\s+/)
+      .map(sentence => sentence.trim())
+      .filter(Boolean);
+
+    const matches = sentences.filter(sentence => {
+      const lower = sentence.toLowerCase();
+      return keywords.some(keyword => lower.includes(keyword));
+    });
+
+    return this.mergeUniqueStrings([], matches).join(' ');
+  }
+
+  extractPrescriptionFromTranscript(text) {
+    const medicationNames = [
+      'paracetamol', 'ibuprofen', 'amoxicillin', 'azithromycin', 'metformin',
+      'lisinopril', 'atorvastatin', 'omeprazole', 'acetaminophen'
+    ];
+    const frequencyPatterns = [
+      'once daily', 'twice daily', 'three times daily', 'four times daily',
+      'daily', 'bid', 'tid', 'qid', 'prn', 'every 8 hours', 'every 12 hours'
+    ];
+    const durationPattern = /\b\d+\s*(?:day|days|week|weeks|month|months)\b/i;
+    const dosePattern = /\b\d+(?:\.\d+)?\s?(?:mg|mcg|g|ml)\b/i;
+    const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(sentence => sentence.trim()).filter(Boolean);
+    const prescriptions = [];
+    const seen = new Set();
+
+    sentences.forEach(sentence => {
+      const lower = sentence.toLowerCase();
+      const medication = medicationNames.find(name => lower.includes(name));
+      if (!medication) return;
+
+      const dose = sentence.match(dosePattern)?.[0] || '';
+      const frequency = frequencyPatterns.find(pattern => lower.includes(pattern)) || '';
+      const duration = sentence.match(durationPattern)?.[0] || '';
+      const key = [medication, dose.toLowerCase(), frequency.toLowerCase(), duration.toLowerCase()].join('|');
+
+      if (seen.has(key)) return;
+      seen.add(key);
+      prescriptions.push({
+        drug: this.capitalize(medication),
+        dose,
+        frequency,
+        duration
+      });
+    });
+
+    return prescriptions;
+  }
+
+  extractDietAdviceFromTranscript(text) {
+    return this.extractAdviceSentences(text, [
+      'diet', 'avoid', 'fluid', 'water', 'hydrate', 'meal', 'eat', 'rest', 'sleep', 'exercise'
+    ]);
+  }
+
+  extractAdviceSentences(text, keywords) {
+    const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(sentence => sentence.trim()).filter(Boolean);
+    return this.mergeUniqueStrings([], sentences.filter(sentence => {
+      const lower = sentence.toLowerCase();
+      return keywords.some(keyword => lower.includes(keyword));
+    }));
   }
 
   /**
@@ -352,7 +753,7 @@ Provide the extracted information as JSON following the structure above.
       lifestyle.forEach(rec => lines.push(`- ${rec}`));
     }
 
-    return lines.join('\n') || 'Follow-up as needed based on clinical assessment.';
+    return lines.join('\n');
   }
 
   /**
@@ -543,7 +944,7 @@ Provide the extracted information as JSON following the structure above.
       }
     });
 
-    return labs.length > 0 ? [...new Set(labs)] : ['Complete Blood Count', 'Fasting Blood Sugar'];
+    return labs.length > 0 ? [...new Set(labs)] : [];
   }
 
   extractRadiology(text) {
@@ -600,7 +1001,7 @@ Provide the extracted information as JSON following the structure above.
       advice.push('Don\'t lie down immediately after eating');
     }
 
-    return advice.length > 0 ? [...new Set(advice)] : ['Maintain balanced diet', 'Stay hydrated', 'Regular exercise'];
+    return advice.length > 0 ? [...new Set(advice)] : [];
   }
 
   extractPrimaryTreatment(text) {
@@ -616,7 +1017,7 @@ Provide the extracted information as JSON following the structure above.
       }
     }
 
-    return 'Symptomatic treatment and observation';
+    return '';
   }
 
   extractFollowUp(text) {
@@ -633,18 +1034,11 @@ Provide the extracted information as JSON following the structure above.
       }
     }
 
-    return 'Follow up after 1 week or earlier if symptoms worsen';
+    return '';
   }
 
   extractLifestyle(text) {
-    const recommendations = [];
-
-    if (text.includes('rest')) recommendations.push('Take adequate rest');
-    if (text.includes('exercise') || text.includes('activity')) recommendations.push('Regular exercise as tolerated');
-    if (text.includes('stress')) recommendations.push('Stress management');
-    if (text.includes('sleep')) recommendations.push('Maintain regular sleep schedule');
-
-    return recommendations;
+    return this.extractAdviceSentences(text, ['rest', 'exercise', 'activity', 'stress', 'sleep']);
   }
 
   extractPresentation(text) {
@@ -678,7 +1072,7 @@ Provide the extracted information as JSON following the structure above.
       }
     }
 
-    return 'Clinical assessment based on history and examination';
+    return '';
   }
 
   extractPlan(text) {
