@@ -12,7 +12,7 @@ export class MedicalExtractor {
     this.isInitialized = false;
     this.llm = null;
     this.useLLM = true;
-    this.currentModel = 'Xenova/Qwen2.5-1.5B-Instruct';
+    this.currentModel = 'LiquidAI/LFM2.5-1.2B-Instruct-ONNX';
   }
 
   async initialize(onProgress, modelId = null) {
