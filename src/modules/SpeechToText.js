@@ -1,14 +1,17 @@
 /**
- * Speech-to-Text Module
+ * Speech-to-Text Module with Live Transcription
  *
- * Uses Web Speech API (built into browser)
- * No external models needed - works immediately
+ * Uses Web Speech API for real-time transcription
  */
 
 export class SpeechToText {
   constructor() {
     this.recognition = null;
     this.isInitialized = false;
+    this.isTranscribing = false;
+    this.onTranscriptCallback = null;
+    this.finalTranscript = '';
+    this.interimTranscript = '';
   }
 
   async initialize() {
@@ -28,6 +31,7 @@ export class SpeechToText {
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
       this.recognition.lang = 'en-US';
+      this.recognition.maxAlternatives = 1;
 
       this.isInitialized = true;
       console.log('STT initialized successfully (Web Speech API)');
@@ -38,70 +42,116 @@ export class SpeechToText {
   }
 
   /**
-   * Transcribe audio blob to text
-   * Note: Web Speech API works with live audio, not blobs
-   * This is a limitation - for full offline support, we'd need custom ONNX
-   * @param {Blob} audioBlob - Audio blob from MediaRecorder
-   * @returns {Promise<string>} Transcribed text
+   * Start live transcription with callback
+   * @param {Function} onTranscript - Callback function(transcript)
    */
-  async transcribe(audioBlob) {
+  async startLiveTranscription(onTranscript) {
     if (!this.isInitialized) {
       await this.initialize();
     }
 
-    console.log('Transcribing audio...');
+    this.onTranscriptCallback = onTranscript;
+    this.finalTranscript = '';
+    this.interimTranscript = '';
+    this.isTranscribing = true;
+
+    console.log('Starting live transcription...');
 
     return new Promise((resolve, reject) => {
-      // Create audio element from blob
-      const audio = new Audio(URL.createObjectURL(audioBlob));
-
-      // Set up recognition
-      let finalTranscript = '';
-
       this.recognition.onresult = (event) => {
-        let interimTranscript = '';
+        let interim = '';
+        let final = '';
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
+            final += transcript + ' ';
+            this.finalTranscript += transcript + ' ';
           } else {
-            interimTranscript += transcript;
+            interim += transcript;
+            this.interimTranscript = interim;
           }
         }
-        console.log('Transcribing...', interimTranscript || finalTranscript);
+
+        // Combine final and interim for live display
+        const combined = this.finalTranscript + interim;
+        if (this.onTranscriptCallback) {
+          this.onTranscriptCallback(combined);
+        }
       };
 
       this.recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
-        reject(new Error(`Speech recognition error: ${event.error}`));
-      };
 
-      this.recognition.onend = () => {
-        if (finalTranscript) {
-          console.log('Transcription complete:', finalTranscript.substring(0, 100) + '...');
-          resolve(finalTranscript.trim());
+        if (event.error === 'not-allowed') {
+          reject(new Error('Microphone permission denied. Please allow microphone access.'));
+        } else if (event.error === 'no-speech') {
+          // No speech detected, but don't fail
+          console.log('No speech detected yet...');
         } else {
-          // Fallback: return placeholder if recognition didn't work
-          console.log('No transcription captured, using fallback');
-          resolve('[Audio recording completed - speech recognition requires microphone access during playback]');
+          reject(new Error(`Speech recognition error: ${event.error}`));
         }
       };
 
-      // Start recognition when audio plays
-      audio.onloadedmetadata = () => {
+      this.recognition.onend = () => {
+        if (this.isTranscribing) {
+          // Auto-restart if we're still supposed to be transcribing
+          try {
+            this.recognition.start();
+          } catch (e) {
+            console.log('Recognition stopped');
+          }
+        }
+      };
+
+      this.recognition.onstart = () => {
+        console.log('Recognition started');
+        resolve();
+      };
+
+      try {
         this.recognition.start();
-        audio.play();
-      };
-
-      audio.onended = () => {
-        setTimeout(() => {
-          this.recognition.stop();
-        }, 1000);
-      };
-
-      audio.onerror = (error) => {
-        reject(new Error(`Audio playback error: ${error.message}`));
-      };
+      } catch (error) {
+        reject(error);
+      }
     });
+  }
+
+  /**
+   * Stop live transcription
+   */
+  async stopLiveTranscription() {
+    this.isTranscribing = false;
+
+    return new Promise((resolve) => {
+      this.recognition.onend = () => {
+        console.log('Recognition stopped');
+        resolve();
+      };
+
+      try {
+        this.recognition.stop();
+      } catch (e) {
+        // Already stopped
+        resolve();
+      }
+    });
+  }
+
+  /**
+   * Get final transcript
+   * @returns {string} Final transcript
+   */
+  async getFinalTranscript() {
+    return this.finalTranscript.trim();
+  }
+
+  /**
+   * Legacy method for compatibility - transcribe audio blob
+   * NOTE: Web Speech API doesn't support blob transcription
+   */
+  async transcribe(audioBlob) {
+    // This method is kept for compatibility but returns the live transcript
+    return this.finalTranscript.trim() || 'No transcript available';
   }
 }

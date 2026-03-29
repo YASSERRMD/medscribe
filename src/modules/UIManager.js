@@ -11,6 +11,7 @@ export class UIManager {
     this.startBtn = document.getElementById('startBtn');
     this.stopBtn = document.getElementById('stopBtn');
     this.printBtn = document.getElementById('printBtn');
+    this.audioPlayer = document.getElementById('audioPlayer');
 
     // Widget elements
     this.widgets = {
@@ -64,11 +65,25 @@ export class UIManager {
   }
 
   /**
-   * Update transcript widget
-   * @param {string} transcript - Consultation transcript
+   * Show audio player with recorded audio
+   * @param {Blob} audioBlob - Audio blob from recording
    */
-  updateTranscript(transcript) {
-    this.setWidgetContent(this.widgets.transcript, transcript);
+  showAudioPlayer(audioBlob) {
+    if (this.audioPlayer && audioBlob) {
+      const audioUrl = URL.createObjectURL(audioBlob);
+      this.audioPlayer.src = audioUrl;
+      this.audioPlayer.style.display = 'block';
+    }
+  }
+
+  /**
+   * Update transcript widget
+   * @param {string} htmlContent - HTML content for transcript
+   */
+  updateTranscript(htmlContent) {
+    if (this.widgets.transcript) {
+      this.widgets.transcript.innerHTML = htmlContent;
+    }
   }
 
   /**
@@ -77,47 +92,47 @@ export class UIManager {
    */
   updateDashboard(medicalData) {
     // Update each widget with HTML rendering
-    this.setWidgetContent(this.widgets.incident, medicalData.incident_record);
-    this.renderPrescription(medicalData.prescription);
-    this.renderList(this.widgets.lab, medicalData.lab_recommendations);
-    this.renderList(this.widgets.radiology, medicalData.radiology_recommendations);
-    this.setWidgetContent(this.widgets.treatment, medicalData.treatment_plan);
-    this.renderList(this.widgets.diet, medicalData.diet_advice);
-    this.setWidgetContent(this.widgets.summary, medicalData.summary);
+    this.setWidgetHTML(this.widgets.incident, medicalData.incident_record || 'No incident record available');
+    this.renderPrescription(medicalData.prescription || []);
+    this.renderList(this.widgets.lab, medicalData.lab_recommendations || []);
+    this.renderList(this.widgets.radiology, medicalData.radiology_recommendations || []);
+    this.setWidgetHTML(this.widgets.treatment, medicalData.treatment_plan || 'No treatment plan available');
+    this.renderList(this.widgets.diet, medicalData.diet_advice || []);
+    this.setWidgetHTML(this.widgets.summary, medicalData.summary || 'No summary available');
   }
 
   /**
-   * Set widget content with HTML support
+   * Set widget content with HTML
    * @param {HTMLElement} widget - Widget element
-   * @param {string} content - Content to display
+   * @param {string} content - Content to display (will be converted to HTML)
    */
-  setWidgetContent(widget, content) {
+  setWidgetHTML(widget, content) {
     if (!content || content.trim() === '') {
       widget.innerHTML = '<div class="placeholder">No information available</div>';
     } else {
-      // Convert text to HTML with formatting
-      const html = this.textToHtml(content);
+      // Convert text to formatted HTML
+      const html = this.formatAsHTML(content);
       widget.innerHTML = html;
     }
   }
 
   /**
-   * Convert text to HTML with basic formatting
-   * @param {string} text - Plain text
-   * @returns {string} HTML with formatting
+   * Format text as HTML with proper formatting
+   * @param {string} text - Plain text content
+   * @returns {string} Formatted HTML
    */
-  textToHtml(text) {
+  formatAsHTML(text) {
+    if (!text) return '';
+
     // Escape HTML first
     let html = this.escapeHtml(text);
 
-    // Convert newlines to <br>
+    // Convert line breaks to <br> or paragraphs
     html = html.replace(/\n\n/g, '</p><p>');
     html = html.replace(/\n/g, '<br>');
 
     // Wrap in paragraph
-    html = `<p>${html}</p>`;
-
-    return html;
+    return `<p>${html}</p>`;
   }
 
   /**
@@ -128,7 +143,7 @@ export class UIManager {
     const widget = this.widgets.prescription;
 
     if (!prescriptions || prescriptions.length === 0) {
-      widget.innerHTML = '<div class="placeholder">No prescriptions</div>';
+      widget.innerHTML = '<div class="placeholder">No prescriptions prescribed</div>';
       return;
     }
 
@@ -165,7 +180,7 @@ export class UIManager {
    */
   renderList(widget, items) {
     if (!items || items.length === 0) {
-      widget.innerHTML = '<div class="placeholder">None</div>';
+      widget.innerHTML = '<div class="placeholder">None recommended</div>';
       return;
     }
 
