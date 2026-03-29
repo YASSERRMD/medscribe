@@ -54,11 +54,15 @@ class MedScribe {
       // Initialize STT (Web Speech API - instant)
       await this.stt.initialize();
 
+      // Get selected model from dropdown
+      const modelSelect = document.getElementById('modelSelect');
+      const selectedModel = modelSelect ? modelSelect.value : 'Xenova/Qwen2.5-1.5B-Instruct';
+
       // Initialize MedicalExtractor with LLM (includes model download)
       this.updateProgress(60, 'Initializing Medical Extractor...');
       await this.extractor.initialize((percent, message) => {
         this.updateProgress(60 + Math.floor(percent * 0.3), message);
-      });
+      }, selectedModel);
 
       // Initialize session history
       this.updateProgress(90, 'Loading session history...');
@@ -255,6 +259,38 @@ document.getElementById('processTextBtn').addEventListener('click', async () => 
     console.error('Error processing text:', error);
     app.ui.setStatus('error', `Error: ${error.message}`);
     app.ui.showError(error.message);
+  }
+});
+
+// Model selection change handler
+document.getElementById('modelSelect')?.addEventListener('change', async (e) => {
+  const newModel = e.target.value;
+
+  if (app.extractor.isInitialized) {
+    const confirmed = confirm(
+      'Changing the model will reinitialize the extraction engine. Continue?'
+    );
+
+    if (confirmed) {
+      app.ui.setStatus('processing', '🔄 Switching model...');
+      app.ui.enableControls(false);
+
+      try {
+        await app.extractor.dispose();
+
+        await app.extractor.initialize((percent, message) => {
+          app.ui.setStatus('processing', `🔄 Loading model: ${Math.floor(percent)}%`);
+        }, newModel);
+
+        app.ui.setStatus('ready', `✅ Model switched to ${e.target.options[e.target.selectedIndex].text}`);
+      } catch (error) {
+        app.ui.setStatus('error', `Failed to switch model: ${error.message}`);
+      }
+
+      app.ui.enableControls(true);
+    } else {
+      e.target.value = app.extractor.currentModel;
+    }
   }
 });
 
