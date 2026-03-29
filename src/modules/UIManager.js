@@ -10,6 +10,7 @@ export class UIManager {
     this.statusText = document.getElementById('statusText');
     this.startBtn = document.getElementById('startBtn');
     this.stopBtn = document.getElementById('stopBtn');
+    this.printBtn = document.getElementById('printBtn');
 
     // Widget elements
     this.widgets = {
@@ -41,6 +42,7 @@ export class UIManager {
   enableControls(enabled) {
     this.startBtn.disabled = !enabled;
     this.stopBtn.disabled = true;
+    // Print button state depends on whether there's data (handled separately)
   }
 
   /**
@@ -50,6 +52,16 @@ export class UIManager {
   enableStopButton(enabled) {
     this.stopBtn.disabled = !enabled;
     this.startBtn.disabled = enabled;
+  }
+
+  /**
+   * Enable print button after report generation
+   * @param {boolean} enabled - Whether print button should be enabled
+   */
+  enablePrintButton(enabled) {
+    if (this.printBtn) {
+      this.printBtn.disabled = !enabled;
+    }
   }
 
   /**
