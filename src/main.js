@@ -30,6 +30,10 @@ class MedScribe {
     this.progressFill = document.getElementById('progressFill');
     this.progressText = document.getElementById('progressText');
     this.recordingWave = document.getElementById('recordingWave');
+    this.manualInputSection = document.getElementById('manualInputSection');
+    this.manualTextInput = document.getElementById('manualTextInput');
+    this.toggleManualBtn = document.getElementById('toggleManualBtn');
+    this.clearManualTextBtn = document.getElementById('clearManualTextBtn');
   }
 
   updateProgress(percent, message) {
@@ -83,8 +87,11 @@ class MedScribe {
   async startConsultation() {
     try {
       this.isRecording = true;
+      this.audioBlob = null;
       this.liveTranscript = '';
       this.finalTranscript = '';
+      this.setManualInputVisible(false);
+      this.ui.hideAudioPlayer();
 
       // Show recording wave animation
       if (this.recordingWave) {
@@ -134,29 +141,12 @@ class MedScribe {
 
       // Get final transcript
       this.finalTranscript = await this.stt.getFinalTranscript();
+      this.updateManualText(this.finalTranscript, { overwrite: true });
 
-      // Show audio player
-      this.ui.showAudioPlayer(this.audioBlob);
-
-      // Update transcript with final version
-      this.ui.updateTranscript(`<div class="transcript-live">${this.formatTranscript(this.finalTranscript)}</div>`);
-
-      this.ui.setStatus('processing', '🔍 Extracting medical data...');
-      const medicalData = await this.extractor.extract(this.finalTranscript);
-      this.currentMedicalData = medicalData;
-
-      // Fill all widgets with HTML content
-      this.ui.updateDashboard(medicalData);
-
-      // Save session to history
-      await this.history.saveSession({
-        transcript: this.finalTranscript,
-        medicalData
+      await this.generateReportFromTranscript(this.finalTranscript, {
+        showAudioPlayer: true,
+        successMessage: '✅ Report generated successfully'
       });
-
-      this.ui.setStatus('ready', '✅ Report generated successfully');
-      this.ui.enableControls(true);
-      this.ui.enablePrintButton(true);
     } catch (error) {
       console.error('Error processing consultation:', error);
       this.ui.setStatus('error', `Error: ${error.message}`);
@@ -194,6 +184,63 @@ class MedScribe {
     return `<p>${html}</p>`;
   }
 
+  setManualInputVisible(visible) {
+    if (this.manualInputSection) {
+      this.manualInputSection.classList.toggle('active', visible);
+    }
+
+    if (this.toggleManualBtn) {
+      this.toggleManualBtn.textContent = visible
+        ? '✖ Hide Manual Input'
+        : '📝 Manual Transcript Input';
+    }
+
+    if (visible) {
+      this.updateManualText(this.finalTranscript || this.liveTranscript);
+      this.manualTextInput?.focus();
+    }
+  }
+
+  updateManualText(text, { overwrite = false } = {}) {
+    if (!this.manualTextInput) return;
+    if (overwrite || !this.manualTextInput.value.trim()) {
+      this.manualTextInput.value = text || '';
+    }
+  }
+
+  async generateReportFromTranscript(transcript, options = {}) {
+    const {
+      showAudioPlayer = false,
+      successMessage = '✅ Report generated successfully'
+    } = options;
+    const normalizedTranscript = transcript.trim();
+
+    this.ui.setStatus('processing', '🔍 Extracting medical data...');
+    this.finalTranscript = normalizedTranscript;
+    this.liveTranscript = normalizedTranscript;
+
+    if (showAudioPlayer && this.audioBlob) {
+      this.ui.showAudioPlayer(this.audioBlob);
+    } else {
+      this.audioBlob = null;
+      this.ui.hideAudioPlayer();
+    }
+
+    const medicalData = await this.extractor.extract(normalizedTranscript);
+    this.currentMedicalData = medicalData;
+
+    this.ui.updateTranscript(`<div class="transcript-live">${this.formatTranscript(normalizedTranscript)}</div>`);
+    this.ui.updateDashboard(medicalData);
+    await this.history.saveSession({
+      transcript: normalizedTranscript,
+      medicalData
+    });
+
+    this.ui.setStatus('ready', successMessage);
+    this.ui.enableControls(true);
+    this.ui.enablePrintButton(true);
+  }
+
   printReport() {
     if (!this.currentMedicalData) {
       alert('No report to print. Please complete a consultation first.');
@@ -217,18 +264,14 @@ document.getElementById('stopBtn').addEventListener('click', () => app.endConsul
 document.getElementById('printBtn')?.addEventListener('click', () => app.printReport());
 
 // Manual text input toggle
-document.getElementById('toggleManualBtn').addEventListener('click', () => {
-  const section = document.getElementById('manualInputSection');
-  const recordingControls = document.getElementById('recordingControls');
-  const isVisible = section.style.display !== 'none';
-
-  section.style.display = isVisible ? 'none' : 'block';
-  recordingControls.style.display = isVisible ? 'flex' : 'none';
+document.getElementById('toggleManualBtn')?.addEventListener('click', () => {
+  const isVisible = app.manualInputSection?.classList.contains('active');
+  app.setManualInputVisible(!isVisible);
 });
 
 // Process manual text input
-document.getElementById('processTextBtn').addEventListener('click', async () => {
-  const text = document.getElementById('manualTextInput').value;
+document.getElementById('processTextBtn')?.addEventListener('click', async () => {
+  const text = document.getElementById('manualTextInput')?.value || '';
 
   if (!text.trim()) {
     alert('Please enter a consultation transcript first.');
@@ -236,29 +279,20 @@ document.getElementById('processTextBtn').addEventListener('click', async () => 
   }
 
   try {
-    app.ui.setStatus('processing', '🔍 Extracting medical data from text...');
-
-    // Extract medical data
-    const medicalData = await app.extractor.extract(text);
-    app.currentMedicalData = medicalData;
-    app.finalTranscript = text;
-
-    // Update UI with formatted content
-    app.ui.updateTranscript(`<div class="transcript-live">${app.formatTranscript(text)}</div>`);
-    app.ui.updateDashboard(medicalData);
-
-    // Save session to history
-    await app.history.saveSession({
-      transcript: text,
-      medicalData
+    await app.generateReportFromTranscript(text, {
+      successMessage: '✅ Report generated successfully from manual text'
     });
-
-    app.ui.setStatus('ready', '✅ Report generated successfully from text');
-    app.ui.enablePrintButton(true);
   } catch (error) {
     console.error('Error processing text:', error);
     app.ui.setStatus('error', `Error: ${error.message}`);
     app.ui.showError(error.message);
+  }
+});
+
+document.getElementById('clearManualTextBtn')?.addEventListener('click', () => {
+  if (app.manualTextInput) {
+    app.manualTextInput.value = '';
+    app.manualTextInput.focus();
   }
 });
 

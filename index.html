@@ -259,6 +259,60 @@
       gap: 8px;
     }
 
+    .widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .widget-header h3 {
+      margin-bottom: 0;
+    }
+
+    .btn-small {
+      padding: 10px 16px;
+      font-size: 0.85rem;
+    }
+
+    .manual-input-panel {
+      display: none;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .manual-input-panel.active {
+      display: block;
+    }
+
+    .manual-input-panel p {
+      margin-bottom: 12px;
+      color: var(--text-secondary);
+    }
+
+    .manual-textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 16px;
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      line-height: 1.6;
+      resize: vertical;
+    }
+
+    .manual-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
     .widget h3::before {
       content: '';
       width: 4px;
@@ -468,9 +522,38 @@
 
     <div class="dashboard">
       <div class="widget full-width">
-        <h3>📝 Live Transcript</h3>
+        <div class="widget-header">
+          <h3>📝 Live Transcript</h3>
+          <button class="btn-secondary btn-small" id="toggleManualBtn" type="button">
+            📝 Manual Transcript Input
+          </button>
+        </div>
         <div class="widget-content" id="transcriptWidget">
           <div class="placeholder">Waiting for consultation to begin...</div>
+        </div>
+        <div class="manual-input-panel" id="manualInputSection">
+          <p>Type or paste text directly into the transcript section, then generate the medical report from it.</p>
+          <textarea
+            class="manual-textarea"
+            id="manualTextInput"
+            placeholder="Enter or paste consultation transcript here...
+
+Example: Patient complains of headache for 3 days, fever since yesterday. History of present illness includes nausea and photophobia. On examination, patient appears febrile with temperature 38.5°C. BP 130/80 mmHg.
+
+Prescribed: Paracetamol 500mg TID for fever, Ibuprofen 400mg PRN for pain.
+
+Recommended: CBC, fasting blood sugar. Chest X-ray.
+
+Advice: Rest, plenty of fluids, soft diet."
+          ></textarea>
+          <div class="manual-actions">
+            <button class="btn-primary" id="processTextBtn" type="button">
+              ⚡ Generate Report from Text
+            </button>
+            <button class="btn-secondary btn-small" id="clearManualTextBtn" type="button">
+              Clear Text
+            </button>
+          </div>
         </div>
         <audio id="audioPlayer" controls style="display: none;"></audio>
       </div>

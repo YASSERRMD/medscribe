@@ -76,6 +76,15 @@ export class UIManager {
     }
   }
 
+  hideAudioPlayer() {
+    if (this.audioPlayer) {
+      this.audioPlayer.pause();
+      this.audioPlayer.removeAttribute('src');
+      this.audioPlayer.load();
+      this.audioPlayer.style.display = 'none';
+    }
+  }
+
   /**
    * Update transcript widget
    * @param {string} htmlContent - HTML content for transcript
