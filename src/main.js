@@ -56,7 +56,7 @@ class MedScribe {
 
       // Get selected model from dropdown
       const modelSelect = document.getElementById('modelSelect');
-      const selectedModel = modelSelect ? modelSelect.value : 'Xenova/Qwen2.5-1.5B-Instruct';
+      const selectedModel = modelSelect ? modelSelect.value : 'LiquidAI/LFM2.5-1.2B-Instruct-ONNX';
 
       // Initialize MedicalExtractor with LLM (includes model download)
       this.updateProgress(60, 'Initializing Medical Extractor...');
