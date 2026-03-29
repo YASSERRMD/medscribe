@@ -12,26 +12,30 @@
     }
 
     :root {
-      --primary: #6366f1;
-      --primary-dark: #4f46e5;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-      --background: #0f172a;
-      --surface: #1e293b;
-      --surface-light: #334155;
-      --text: #f1f5f9;
-      --text-secondary: #94a3b8;
-      --border: #334155;
-      --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-      --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+      --primary: #1d4ed8;
+      --primary-dark: #1e40af;
+      --primary-soft: #dbeafe;
+      --success: #0f766e;
+      --danger: #b42318;
+      --warning: #b54708;
+      --background: #f4f7fb;
+      --surface: #ffffff;
+      --surface-alt: #f8fafc;
+      --surface-strong: #e2e8f0;
+      --text: #0f172a;
+      --text-secondary: #475569;
+      --border: #d7e0ea;
+      --shadow: 0 10px 30px rgb(15 23 42 / 0.06);
+      --shadow-lg: 0 18px 48px rgb(15 23 42 / 0.10);
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--background);
+      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      background:
+        radial-gradient(circle at top left, #eff6ff 0, transparent 28%),
+        linear-gradient(180deg, #f8fbff 0%, var(--background) 100%);
       color: var(--text);
-      line-height: 1.6;
+      line-height: 1.5;
       min-height: 100vh;
     }
 
@@ -39,7 +43,7 @@
     .loading-overlay {
       position: fixed;
       inset: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -54,14 +58,21 @@
 
     .loading-content {
       text-align: center;
-      color: white;
+      color: var(--text);
+      background: rgb(255 255 255 / 0.88);
+      border: 1px solid rgb(215 224 234 / 0.9);
+      border-radius: 24px;
+      box-shadow: var(--shadow-lg);
+      padding: 40px 36px;
+      min-width: min(520px, 90vw);
+      backdrop-filter: blur(12px);
     }
 
     .loading-spinner {
       width: 60px;
       height: 60px;
-      border: 4px solid rgba(255, 255, 255, 0.3);
-      border-top-color: white;
+      border: 4px solid rgb(29 78 216 / 0.12);
+      border-top-color: var(--primary);
       border-radius: 50%;
       animation: spin 1s linear infinite;
       margin: 0 auto 24px;
@@ -72,19 +83,20 @@
     }
 
     .loading-content h1 {
-      font-size: 2.5rem;
+      font-size: 2.25rem;
       font-weight: 700;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+      letter-spacing: -0.03em;
     }
 
     .loading-content p {
-      font-size: 1.1rem;
-      opacity: 0.9;
-      margin-bottom: 32px;
+      font-size: 1rem;
+      color: var(--text-secondary);
+      margin-bottom: 28px;
     }
 
     .progress-bar {
-      background: rgba(255, 255, 255, 0.3);
+      background: #e6edf7;
       border-radius: 10px;
       height: 8px;
       overflow: hidden;
@@ -92,7 +104,7 @@
     }
 
     .progress-fill {
-      background: white;
+      background: linear-gradient(90deg, var(--primary) 0%, #3b82f6 100%);
       height: 100%;
       width: 0%;
       transition: width 0.3s ease;
@@ -101,45 +113,44 @@
 
     .progress-text {
       font-size: 0.9rem;
-      opacity: 0.8;
+      color: var(--text-secondary);
     }
 
     /* Main Container */
     .container {
-      max-width: 1400px;
+      max-width: 1320px;
       margin: 0 auto;
-      padding: 24px;
+      padding: 32px 24px 48px;
     }
 
     /* Header */
     .header {
-      text-align: center;
-      padding: 40px 0;
-      margin-bottom: 32px;
+      padding: 8px 0 28px;
+      margin-bottom: 20px;
     }
 
     .header h1 {
-      font-size: 3rem;
-      font-weight: 800;
-      background: linear-gradient(135deg, var(--primary) 0%, #a855f7 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 12px;
+      font-size: clamp(2.4rem, 5vw, 3.2rem);
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 10px;
+      letter-spacing: -0.04em;
     }
 
     .header p {
-      font-size: 1.1rem;
+      max-width: 760px;
+      font-size: 1rem;
       color: var(--text-secondary);
+      margin: 0;
     }
 
     /* Status Bar */
     .status-bar {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 20px 24px;
-      margin-bottom: 24px;
+      border-radius: 20px;
+      padding: 18px 22px;
+      margin-bottom: 18px;
       display: flex;
       align-items: center;
       gap: 16px;
@@ -168,61 +179,202 @@
 
     .status-text {
       flex: 1;
-      font-size: 1rem;
+      font-size: 0.95rem;
+      font-weight: 500;
     }
 
     /* Controls */
     .controls {
       display: flex;
-      gap: 16px;
-      justify-content: center;
-      margin-bottom: 32px;
+      gap: 12px;
+      justify-content: flex-start;
+      margin-bottom: 22px;
       flex-wrap: wrap;
+      padding: 18px 20px;
+      background: rgb(255 255 255 / 0.76);
+      border: 1px solid rgb(215 224 234 / 0.9);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
     }
 
     button {
-      padding: 16px 40px;
-      font-size: 1rem;
+      padding: 14px 22px;
+      font-size: 0.95rem;
       font-weight: 600;
-      border: none;
+      border: 1px solid transparent;
       border-radius: 12px;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
       font-family: inherit;
-      box-shadow: var(--shadow);
+      box-shadow: none;
     }
 
     button:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-lg);
+      transform: none;
+      box-shadow: 0 8px 18px rgb(15 23 42 / 0.08);
     }
 
     button:disabled {
-      opacity: 0.5;
+      opacity: 0.45;
       cursor: not-allowed;
-      transform: none;
+      box-shadow: none;
     }
 
     .btn-primary {
-      background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+      background: linear-gradient(180deg, #2563eb 0%, var(--primary) 100%);
       color: white;
     }
 
     .btn-danger {
-      background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
-      color: white;
+      background: #fff5f5;
+      border-color: #fecaca;
+      color: var(--danger);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #fee2e2;
     }
 
     .btn-secondary {
-      background: var(--surface-light);
+      background: var(--surface);
       color: var(--text);
+      border-color: var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--surface-alt);
+    }
+
+    .btn-outline {
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+      border-color: #bfdbfe;
+    }
+
+    .btn-outline:hover:not(:disabled) {
+      background: #cfe1ff;
+    }
+
+    .action-note {
+      display: inline-flex;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .control-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .panel-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .panel-label::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--primary);
+    }
+
+    .intro-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.9fr);
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .intro-panel,
+    .summary-panel {
+      background: rgb(255 255 255 / 0.82);
+      border: 1px solid rgb(215 224 234 / 0.9);
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .intro-panel h2,
+    .summary-panel h2 {
+      font-size: 1.45rem;
+      margin-bottom: 10px;
+      letter-spacing: -0.02em;
+    }
+
+    .intro-panel p,
+    .summary-panel p {
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    .summary-panel dl {
+      display: grid;
+      gap: 14px;
+    }
+
+    .summary-panel dt {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    .summary-panel dd {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    @media (max-width: 960px) {
+      .intro-card {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .container {
+        padding: 20px 16px 36px;
+      }
+
+      .controls {
+        padding: 14px;
+      }
+
+      button {
+        width: 100%;
+        justify-content: center;
+      }
     }
 
     /* Dashboard */
     .dashboard {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 24px;
+      gap: 18px;
       margin-bottom: 24px;
     }
 
@@ -235,14 +387,10 @@
     .widget {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 16px;
+      border-radius: 20px;
       padding: 24px;
       box-shadow: var(--shadow);
-      transition: all 0.3s ease;
-    }
-
-    .widget:hover {
-      box-shadow: var(--shadow-lg);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
     .widget.full-width {
@@ -252,11 +400,12 @@
     .widget h3 {
       font-size: 1.25rem;
       font-weight: 700;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       color: var(--text);
       display: flex;
       align-items: center;
       gap: 8px;
+      letter-spacing: -0.02em;
     }
 
     .widget-header {
@@ -272,14 +421,14 @@
     }
 
     .btn-small {
-      padding: 10px 16px;
+      padding: 10px 14px;
       font-size: 0.85rem;
     }
 
     .manual-input-panel {
       display: none;
-      margin-top: 16px;
-      padding-top: 16px;
+      margin-top: 18px;
+      padding-top: 18px;
       border-top: 1px solid var(--border);
     }
 
@@ -296,7 +445,7 @@
       width: 100%;
       min-height: 220px;
       padding: 16px;
-      background: var(--background);
+      background: var(--surface-alt);
       border: 1px solid var(--border);
       border-radius: 12px;
       color: var(--text);
@@ -317,13 +466,13 @@
       content: '';
       width: 4px;
       height: 24px;
-      background: linear-gradient(135deg, var(--primary) 0%, #a855f7 100%);
+      background: linear-gradient(180deg, var(--primary) 0%, #60a5fa 100%);
       border-radius: 2px;
     }
 
     .widget-content {
       color: var(--text-secondary);
-      line-height: 1.8;
+      line-height: 1.7;
       max-height: 400px;
       overflow-y: auto;
     }
@@ -335,7 +484,7 @@
     .placeholder {
       color: var(--text-secondary);
       font-style: italic;
-      opacity: 0.6;
+      opacity: 0.8;
     }
 
     /* Transcript Widget */
@@ -357,8 +506,8 @@
       width: 100%;
       border-collapse: collapse;
       margin-top: 16px;
-      background: var(--background);
-      border-radius: 8px;
+      background: var(--surface-alt);
+      border-radius: 14px;
       overflow: hidden;
     }
 
@@ -369,12 +518,12 @@
     }
 
     table th {
-      background: var(--surface-light);
+      background: #eff6ff;
       font-weight: 600;
       color: var(--text);
       text-transform: uppercase;
-      font-size: 0.85rem;
-      letter-spacing: 0.05em;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
     }
 
     table tr:last-child td {
@@ -382,7 +531,7 @@
     }
 
     table tbody tr:hover {
-      background: var(--surface-light);
+      background: #f8fbff;
     }
 
     /* Lists */
@@ -394,22 +543,23 @@
     li {
       padding: 12px 16px;
       margin-bottom: 8px;
-      background: var(--background);
-      border-radius: 8px;
-      border-left: 3px solid var(--primary);
-      transition: all 0.2s ease;
+      background: var(--surface-alt);
+      border-radius: 10px;
+      border-left: 3px solid #93c5fd;
+      transition: border-color 0.2s ease, background 0.2s ease;
     }
 
     li:hover {
       border-left-color: var(--primary);
-      transform: translateX(4px);
+      background: #f8fbff;
     }
 
     /* Audio Player */
     audio {
       width: 100%;
       margin-top: 16px;
-      border-radius: 8px;
+      border-radius: 12px;
+      background: var(--surface-alt);
     }
 
     /* Recording Animation */
@@ -449,16 +599,16 @@
     }
 
     ::-webkit-scrollbar-track {
-      background: var(--background);
+      background: transparent;
     }
 
     ::-webkit-scrollbar-thumb {
-      background: var(--surface-light);
+      background: #cbd5e1;
       border-radius: 4px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: var(--border);
+      background: #94a3b8;
     }
   </style>
 </head>
@@ -478,8 +628,39 @@
 
   <div class="container">
     <div class="header">
+      <div class="panel-label">Clinical Workspace</div>
       <h1>MedScribe</h1>
-      <p>AI-Powered Medical Scribe for Healthcare Professionals • 100% Privacy-First</p>
+      <p>Private medical documentation workspace for capturing consultations, generating structured clinical notes, and preparing printable reports.</p>
+    </div>
+
+    <div class="intro-card">
+      <section class="intro-panel">
+        <h2>Focused consultation capture</h2>
+        <p>Record a session or enter the transcript manually. MedScribe structures the note into the sections clinicians actually review: history, prescriptions, orders, treatment plan, and summary.</p>
+        <div class="control-group">
+          <div class="action-note">Runs locally in the browser</div>
+          <div class="action-note">Liquid AI extraction engine</div>
+          <div class="action-note">Printable report output</div>
+        </div>
+      </section>
+      <aside class="summary-panel">
+        <h2>Workflow</h2>
+        <p>Use the session controls below, then review and print the generated note once the transcript has been processed.</p>
+        <dl>
+          <div>
+            <dt>Step 1</dt>
+            <dd>Start a session or open manual entry</dd>
+          </div>
+          <div>
+            <dt>Step 2</dt>
+            <dd>Capture or paste the consultation transcript</dd>
+          </div>
+          <div>
+            <dt>Step 3</dt>
+            <dd>Review the structured report and print when ready</dd>
+          </div>
+        </dl>
+      </aside>
     </div>
 
     <div class="status-bar">
@@ -495,44 +676,30 @@
     </div>
 
     <div class="controls">
-      <!-- Model Selection -->
-      <div style="display: flex; flex-direction: column; gap: 8px; min-width: 280px;">
-        <label style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600;">
-          🤖 AI Model for Extraction
-        </label>
-        <select id="modelSelect" style="padding: 12px 16px; font-size: 0.95rem; background: var(--surface-light); color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
-          <option value="LiquidAI/LFM2.5-1.2B-Instruct-ONNX" selected>Liquid AI LFM2.5 1.2B (Recommended)</option>
-          <option value="Xenova/Qwen2.5-1.5B-Instruct">Qwen2.5 1.5B (Alternative)</option>
-          <option value="Xenova/Phi-3-mini-4k-instruct">Phi-3 Mini 4K</option>
-          <option value="Xenova/TinyLlama-1.1B-chat">TinyLlama 1.1B (Fastest)</option>
-          <option value="keyword" style="color: var(--warning);">Keyword Extraction (No LLM)</option>
-        </select>
-      </div>
-
       <button class="btn-primary" id="startBtn" disabled>
-        🎤 Start Consultation
+        Start Session
       </button>
       <button class="btn-danger" id="stopBtn" disabled>
-        ⏹️ End & Generate Report
+        Finish and Generate
       </button>
       <button class="btn-secondary" id="printBtn" disabled>
-        🖨️ Print Report
+        Print Report
       </button>
     </div>
 
     <div class="dashboard">
       <div class="widget full-width">
         <div class="widget-header">
-          <h3>📝 Live Transcript</h3>
-          <button class="btn-secondary btn-small" id="toggleManualBtn" type="button">
-            📝 Manual Transcript Input
+          <h3>Transcript</h3>
+          <button class="btn-outline btn-small" id="toggleManualBtn" type="button">
+            Manual Entry
           </button>
         </div>
         <div class="widget-content" id="transcriptWidget">
-          <div class="placeholder">Waiting for consultation to begin...</div>
+          <div class="placeholder">The transcript will appear here once a session starts or manual text is submitted.</div>
         </div>
         <div class="manual-input-panel" id="manualInputSection">
-          <p>Type or paste text directly into the transcript section, then generate the medical report from it.</p>
+          <p>Paste dictated notes or type the consultation transcript directly here, then generate the structured report.</p>
           <textarea
             class="manual-textarea"
             id="manualTextInput"
@@ -548,7 +715,7 @@ Advice: Rest, plenty of fluids, soft diet."
           ></textarea>
           <div class="manual-actions">
             <button class="btn-primary" id="processTextBtn" type="button">
-              ⚡ Generate Report from Text
+              Generate Report
             </button>
             <button class="btn-secondary btn-small" id="clearManualTextBtn" type="button">
               Clear Text
@@ -559,51 +726,51 @@ Advice: Rest, plenty of fluids, soft diet."
       </div>
 
       <div class="widget">
-        <h3>🩺 Incident Record</h3>
+        <h3>Clinical Note</h3>
         <div class="widget-content" id="incidentWidget">
-          <div class="placeholder">Waiting for consultation...</div>
+          <div class="placeholder">Structured clinical details will appear after extraction.</div>
         </div>
       </div>
 
       <div class="widget">
-        <h3>💊 Prescription</h3>
+        <h3>Prescription</h3>
         <div class="widget-content" id="prescriptionWidget">
-          <div class="placeholder">Waiting for consultation...</div>
+          <div class="placeholder">Medication orders will appear after extraction.</div>
         </div>
       </div>
 
       <div class="widget">
-        <h3>🔬 Lab Recommendations</h3>
+        <h3>Lab Orders</h3>
         <div class="widget-content" id="labWidget">
-          <div class="placeholder">Waiting for consultation...</div>
+          <div class="placeholder">Laboratory recommendations will appear after extraction.</div>
         </div>
       </div>
 
       <div class="widget">
-        <h3>📷 Radiology Recommendations</h3>
+        <h3>Imaging Orders</h3>
         <div class="widget-content" id="radiologyWidget">
-          <div class="placeholder">Waiting for consultation...</div>
+          <div class="placeholder">Imaging recommendations will appear after extraction.</div>
         </div>
       </div>
 
       <div class="widget">
-        <h3>💉 Treatment Plan</h3>
+        <h3>Treatment Plan</h3>
         <div class="widget-content" id="treatmentWidget">
-          <div class="placeholder">Waiting for consultation...</div>
+          <div class="placeholder">The treatment plan will appear after extraction.</div>
         </div>
       </div>
 
       <div class="widget">
-        <h3>🥗 Diet Advice</h3>
+        <h3>Diet and Lifestyle</h3>
         <div class="widget-content" id="dietWidget">
-          <div class="placeholder">Waiting for consultation...</div>
+          <div class="placeholder">Dietary and lifestyle advice will appear after extraction.</div>
         </div>
       </div>
 
       <div class="widget full-width">
-        <h3>📋 Consultation Summary</h3>
+        <h3>Clinical Summary</h3>
         <div class="widget-content" id="summaryWidget">
-          <div class="placeholder">Waiting for consultation...</div>
+          <div class="placeholder">The consultation summary will appear after extraction.</div>
         </div>
       </div>
     </div>
