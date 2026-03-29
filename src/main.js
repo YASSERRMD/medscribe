@@ -8,6 +8,8 @@ import { AudioRecorder } from './modules/AudioRecorder.js';
 import { SpeechToText } from './modules/SpeechToText.js';
 import { MedicalExtractor } from './modules/MedicalExtractor.js';
 import { UIManager } from './modules/UIManager.js';
+import { SessionHistory } from './modules/SessionHistory.js';
+import { PrintManager } from './modules/PrintManager.js';
 
 class MedScribe {
   constructor() {
@@ -15,22 +17,26 @@ class MedScribe {
     this.recorder = new AudioRecorder();
     this.stt = null;
     this.extractor = null;
+    this.history = new SessionHistory();
 
     this.isRecording = false;
     this.audioBlob = null;
+    this.currentTranscript = '';
+    this.currentMedicalData = null;
   }
 
   async initialize() {
     this.ui.setStatus('ready', 'Loading AI models... (this may take a minute on first load)');
 
     try {
-      // Initialize models in parallel
+      // Initialize models and history in parallel
       this.stt = new SpeechToText();
       this.extractor = new MedicalExtractor();
 
       await Promise.all([
         this.stt.initialize(),
-        this.extractor.initialize()
+        this.extractor.initialize(),
+        this.history.initialize()
       ]);
 
       this.ui.setStatus('ready', 'Ready - Models loaded successfully');
@@ -65,19 +71,41 @@ class MedScribe {
 
       this.ui.setStatus('processing', 'Transcribing audio...');
       const transcript = await this.stt.transcribe(this.audioBlob);
+      this.currentTranscript = transcript;
       this.ui.updateTranscript(transcript);
 
       this.ui.setStatus('processing', 'Extracting medical data...');
       const medicalData = await this.extractor.extract(transcript);
+      this.currentMedicalData = medicalData;
       this.ui.updateDashboard(medicalData);
+
+      // Save session to history
+      await this.history.saveSession({
+        transcript,
+        medicalData
+      });
 
       this.ui.setStatus('ready', 'Report generated successfully');
       this.ui.enableControls(true);
+      this.ui.enablePrintButton(true);
     } catch (error) {
       console.error('Error processing consultation:', error);
       this.ui.setStatus('error', `Error: ${error.message}`);
       this.ui.enableControls(true);
     }
+  }
+
+  printReport() {
+    if (!this.currentMedicalData) {
+      alert('No report to print. Please complete a consultation first.');
+      return;
+    }
+
+    PrintManager.printReport(
+      this.currentMedicalData,
+      this.currentTranscript,
+      {} // Doctor info can be added later
+    );
   }
 }
 
@@ -87,6 +115,7 @@ const app = new MedScribe();
 // Wire up event listeners
 document.getElementById('startBtn').addEventListener('click', () => app.startConsultation());
 document.getElementById('stopBtn').addEventListener('click', () => app.endConsultation());
+document.getElementById('printBtn')?.addEventListener('click', () => app.printReport());
 
 // Start initialization
 app.initialize();
