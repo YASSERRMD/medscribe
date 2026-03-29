@@ -11,30 +11,40 @@ export class MedicalExtractor {
   constructor() {
     this.isInitialized = false;
     this.llm = null;
-    this.useLLM = true; // Set to false to fallback to keyword extraction
+    this.useLLM = true;
+    this.currentModel = 'Xenova/Qwen2.5-1.5B-Instruct';
   }
 
-  async initialize(onProgress) {
+  async initialize(onProgress, modelId = null) {
+    if (modelId && modelId !== this.currentModel) {
+      this.currentModel = modelId;
+      this.isInitialized = false;
+    }
+
     if (this.isInitialized) return;
 
     console.log('Initializing Medical Extractor...');
 
+    if (this.currentModel === 'keyword') {
+      this.useLLM = false;
+      this.isInitialized = true;
+      console.log('Using keyword extraction mode');
+      return;
+    }
+
     if (this.useLLM) {
       try {
-        // Initialize the LLM engine
         this.llm = new ONNXLlmEngine({
-          // Can be swapped to Liquid AI LFM when available:
-          // modelId: 'Liquid4All/LFM2.5-1.2B-Instruct'
-          modelId: 'Xenova/Qwen2.5-1.5B-Instruct', // Works well now
+          modelId: this.currentModel,
           maxTokens: 2048,
-          temperature: 0.1, // Low temp for consistent structured output
+          temperature: 0.1,
           onProgress: (percent, message) => {
             if (onProgress) onProgress(percent, message);
           }
         });
 
         await this.llm.initialize();
-        console.log('LLM Engine ready for extraction');
+        console.log(`LLM Engine ready with model: ${this.currentModel}`);
       } catch (error) {
         console.warn('LLM initialization failed, falling back to keyword extraction:', error);
         this.useLLM = false;
@@ -43,6 +53,15 @@ export class MedicalExtractor {
 
     this.isInitialized = true;
     console.log('Medical Extractor initialized successfully');
+  }
+
+  async dispose() {
+    if (this.llm) {
+      await this.llm.dispose();
+      this.llm = null;
+    }
+    this.isInitialized = false;
+    console.log('Medical Extractor disposed');
   }
 
   /**
