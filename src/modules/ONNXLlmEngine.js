@@ -12,11 +12,16 @@ export class ONNXLlmEngine {
     this.tokenizer = null;
     this.isInitialized = false;
     this.isModelLoading = false;
+    this.initializationPromise = null;
 
     // Model configuration
     this.modelConfig = {
       modelId: config.modelId || 'LiquidAI/LFM2.5-1.2B-Instruct-ONNX',
-      modelFile: config.modelFile || 'onnx/model_quantized.onnx',
+      modelFileName: config.modelFileName || 'model_q4',
+      subfolder: config.subfolder || 'onnx',
+      dtype: config.dtype || 'q4',
+      preferredDevice: config.preferredDevice || 'webgpu',
+      requiresWebGPU: config.requiresWebGPU || false,
       maxTokens: config.maxTokens || 2048,
       temperature: config.temperature ?? 0.1, // Lower temp for medical consistency
       topP: config.topP ?? 0.9,
@@ -30,13 +35,22 @@ export class ONNXLlmEngine {
 
   async initialize() {
     if (this.isInitialized) return;
-    if (this.isModelLoading) {
-      throw new Error('Model is already loading. Please wait.');
+    if (this.initializationPromise) {
+      return this.initializationPromise;
     }
 
+    this.initializationPromise = this.initializeGenerator();
+
+    try {
+      await this.initializationPromise;
+    } finally {
+      this.initializationPromise = null;
+    }
+  }
+
+  async initializeGenerator() {
     this.isModelLoading = true;
     this.onProgress(10, 'Importing transformers library...');
-
     try {
       // Dynamic import to reduce initial bundle
       const { pipeline, env } = await import('@huggingface/transformers');
@@ -45,10 +59,20 @@ export class ONNXLlmEngine {
       env.allowLocalModels = false;
       env.useBrowserCache = true;
 
-      this.onProgress(30, 'Loading model and tokenizer...');
+      const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
+      const primaryDevice = hasWebGPU ? this.modelConfig.preferredDevice : 'wasm';
 
-      // Initialize the text generation pipeline
-      this.generator = await pipeline('text-generation', this.modelConfig.modelId, {
+      if (this.modelConfig.requiresWebGPU && !hasWebGPU) {
+        throw new Error('This model requires WebGPU, but the browser does not expose navigator.gpu.');
+      }
+
+      this.onProgress(30, `Loading model and tokenizer on ${primaryDevice}...`);
+
+      const attempt = async (device) => pipeline('text-generation', this.modelConfig.modelId, {
+        model_file_name: this.modelConfig.modelFileName,
+        subfolder: this.modelConfig.subfolder,
+        dtype: this.modelConfig.dtype,
+        device,
         progress_callback: (progress) => {
           if (progress.status === 'downloading') {
             const percent = progress.progress || 0;
@@ -57,20 +81,32 @@ export class ONNXLlmEngine {
               `Downloading model: ${Math.floor(percent)}%`
             );
           } else if (progress.status === 'loading') {
-            this.onProgress(80, 'Loading model into memory...');
+            this.onProgress(80, `Loading model into ${device} memory...`);
           }
         }
       });
 
+      try {
+        this.generator = await attempt(primaryDevice);
+      } catch (primaryError) {
+        if (primaryDevice === 'webgpu' && !this.modelConfig.requiresWebGPU) {
+          console.warn(`Falling back to WASM for ${this.modelConfig.modelId}:`, primaryError);
+          this.onProgress(35, 'WebGPU load failed. Retrying on WASM...');
+          this.generator = await attempt('wasm');
+        } else {
+          throw primaryError;
+        }
+      }
+
       this.onProgress(100, 'Model loaded successfully!');
       this.isInitialized = true;
-      this.isModelLoading = false;
 
       console.log(`ONNX LLM Engine initialized with ${this.modelConfig.modelId}`);
     } catch (error) {
-      this.isModelLoading = false;
       console.error('Model initialization failed:', error);
       throw new Error(`Failed to load model: ${error.message}`);
+    } finally {
+      this.isModelLoading = false;
     }
   }
 
@@ -212,6 +248,8 @@ ${JSON.stringify(schema, null, 2)}
       this.generator = null;
     }
     this.isInitialized = false;
+    this.isModelLoading = false;
+    this.initializationPromise = null;
     console.log('Model disposed from memory');
   }
 }
