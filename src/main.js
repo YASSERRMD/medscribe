@@ -1,7 +1,7 @@
 /**
  * MedScribe - Privacy-First AI Medical Consultation
  *
- * Main entry point - orchestrates all modules
+ * Main entry point - live transcription & extraction
  */
 
 import { AudioRecorder } from './modules/AudioRecorder.js';
@@ -15,19 +15,21 @@ class MedScribe {
   constructor() {
     this.ui = new UIManager();
     this.recorder = new AudioRecorder();
-    this.stt = null;
-    this.extractor = null;
+    this.stt = new SpeechToText();
+    this.extractor = new MedicalExtractor();
     this.history = new SessionHistory();
 
     this.isRecording = false;
     this.audioBlob = null;
-    this.currentTranscript = '';
+    this.liveTranscript = '';
+    this.finalTranscript = '';
     this.currentMedicalData = null;
 
-    // Loading screen elements
+    // UI elements
     this.loadingOverlay = document.getElementById('loadingOverlay');
     this.progressFill = document.getElementById('progressFill');
     this.progressText = document.getElementById('progressText');
+    this.recordingWave = document.getElementById('recordingWave');
   }
 
   updateProgress(percent, message) {
@@ -46,46 +48,24 @@ class MedScribe {
   }
 
   async initialize() {
-    this.updateProgress(10, 'Starting...');
+    this.updateProgress(30, 'Initializing Speech Recognition...');
 
     try {
-      // Initialize models sequentially with progress updates
-      this.updateProgress(20, 'Initializing Speech-to-Text model...');
-      this.stt = new SpeechToText();
-
-      // Track STT loading progress
-      const originalLog = console.log;
-      console.log = (...args) => {
-        const message = args.join(' ');
-        if (message.includes('[STT]')) {
-          if (message.includes('Downloading')) {
-            const match = message.match(/([\d.]+)%/);
-            if (match) {
-              const progress = 20 + (parseInt(match[1]) * 0.3);
-              this.updateProgress(progress, message);
-            }
-          } else if (message.includes('loaded successfully')) {
-            this.updateProgress(50, 'STT model loaded');
-          }
-        }
-        originalLog.apply(console, args);
-      };
-
+      // Initialize STT (Web Speech API - instant)
       await this.stt.initialize();
 
-      console.log = originalLog;
+      // Initialize MedicalExtractor
       this.updateProgress(60, 'Initializing Medical Extractor...');
-
-      this.extractor = new MedicalExtractor();
       await this.extractor.initialize();
 
-      this.updateProgress(80, 'Loading session history...');
+      // Initialize session history
+      this.updateProgress(90, 'Loading session history...');
       await this.history.initialize();
 
       this.updateProgress(100, 'Ready!');
       setTimeout(() => this.hideLoadingScreen(), 500);
 
-      this.ui.setStatus('ready', 'Ready - Models loaded successfully');
+      this.ui.setStatus('ready', 'Ready to start consultation');
       this.ui.enableControls(true);
     } catch (error) {
       console.error('Initialization error:', error);
@@ -97,49 +77,115 @@ class MedScribe {
   async startConsultation() {
     try {
       this.isRecording = true;
-      this.ui.setStatus('recording', 'Recording consultation...');
-      this.ui.enableControls(false);
+      this.liveTranscript = '';
+      this.finalTranscript = '';
 
+      // Show recording wave animation
+      if (this.recordingWave) {
+        this.recordingWave.classList.add('active');
+      }
+
+      this.ui.setStatus('recording', '🎤 Recording... Speak now');
+      this.ui.enableControls(false);
+      this.ui.updateTranscript('<div class="placeholder">🎤 Listening... Start speaking...</div>');
+
+      // Start recording
       await this.recorder.start();
+
+      // Start live transcription
+      await this.stt.startLiveTranscription((transcript) => {
+        this.liveTranscript = transcript;
+        this.ui.updateTranscript(`<div class="transcript-live">${this.formatTranscript(transcript)}</div>`);
+      });
+
       this.ui.enableStopButton(true);
     } catch (error) {
       console.error('Error starting recording:', error);
       this.ui.setStatus('error', `Error: ${error.message}`);
       this.isRecording = false;
+      if (this.recordingWave) {
+        this.recordingWave.classList.remove('active');
+      }
       this.ui.enableControls(true);
     }
   }
 
   async endConsultation() {
     try {
-      this.ui.setStatus('processing', 'Stopping recording...');
+      this.ui.setStatus('processing', '⏹️ Stopping recording...');
+
+      // Stop live transcription
+      await this.stt.stopLiveTranscription();
+
+      // Stop recording and get audio blob
       this.audioBlob = await this.recorder.stop();
       this.isRecording = false;
 
-      this.ui.setStatus('processing', 'Transcribing audio...');
-      const transcript = await this.stt.transcribe(this.audioBlob);
-      this.currentTranscript = transcript;
-      this.ui.updateTranscript(transcript);
+      // Hide recording wave animation
+      if (this.recordingWave) {
+        this.recordingWave.classList.remove('active');
+      }
 
-      this.ui.setStatus('processing', 'Extracting medical data...');
-      const medicalData = await this.extractor.extract(transcript);
+      // Get final transcript
+      this.finalTranscript = await this.stt.getFinalTranscript();
+
+      // Show audio player
+      this.ui.showAudioPlayer(this.audioBlob);
+
+      // Update transcript with final version
+      this.ui.updateTranscript(`<div class="transcript-live">${this.formatTranscript(this.finalTranscript)}</div>`);
+
+      this.ui.setStatus('processing', '🔍 Extracting medical data...');
+      const medicalData = await this.extractor.extract(this.finalTranscript);
       this.currentMedicalData = medicalData;
+
+      // Fill all widgets with HTML content
       this.ui.updateDashboard(medicalData);
 
       // Save session to history
       await this.history.saveSession({
-        transcript,
+        transcript: this.finalTranscript,
         medicalData
       });
 
-      this.ui.setStatus('ready', 'Report generated successfully');
+      this.ui.setStatus('ready', '✅ Report generated successfully');
       this.ui.enableControls(true);
       this.ui.enablePrintButton(true);
     } catch (error) {
       console.error('Error processing consultation:', error);
       this.ui.setStatus('error', `Error: ${error.message}`);
+      if (this.recordingWave) {
+        this.recordingWave.classList.remove('active');
+      }
       this.ui.enableControls(true);
     }
+  }
+
+  formatTranscript(text) {
+    // Convert markdown-like formatting to HTML
+    if (!text) return '<div class="placeholder">No transcript available</div>';
+
+    // Escape HTML
+    let html = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Bold: **text**
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // Italic: *text*
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    // Headers: ## or ###
+    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+
+    // Line breaks
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = html.replace(/\n/g, '<br>');
+
+    return `<p>${html}</p>`;
   }
 
   printReport() {
@@ -150,13 +196,13 @@ class MedScribe {
 
     PrintManager.printReport(
       this.currentMedicalData,
-      this.currentTranscript,
+      this.finalTranscript,
       {} // Doctor info can be added later
     );
   }
 }
 
-// Initialize app when DOM is ready
+// Initialize app
 const app = new MedScribe();
 
 // Wire up event listeners
