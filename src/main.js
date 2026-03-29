@@ -54,9 +54,11 @@ class MedScribe {
       // Initialize STT (Web Speech API - instant)
       await this.stt.initialize();
 
-      // Initialize MedicalExtractor
+      // Initialize MedicalExtractor with LLM (includes model download)
       this.updateProgress(60, 'Initializing Medical Extractor...');
-      await this.extractor.initialize();
+      await this.extractor.initialize((percent, message) => {
+        this.updateProgress(60 + Math.floor(percent * 0.3), message);
+      });
 
       // Initialize session history
       this.updateProgress(90, 'Loading session history...');
@@ -209,6 +211,52 @@ const app = new MedScribe();
 document.getElementById('startBtn').addEventListener('click', () => app.startConsultation());
 document.getElementById('stopBtn').addEventListener('click', () => app.endConsultation());
 document.getElementById('printBtn')?.addEventListener('click', () => app.printReport());
+
+// Manual text input toggle
+document.getElementById('toggleManualBtn').addEventListener('click', () => {
+  const section = document.getElementById('manualInputSection');
+  const recordingControls = document.getElementById('recordingControls');
+  const isVisible = section.style.display !== 'none';
+
+  section.style.display = isVisible ? 'none' : 'block';
+  recordingControls.style.display = isVisible ? 'flex' : 'none';
+});
+
+// Process manual text input
+document.getElementById('processTextBtn').addEventListener('click', async () => {
+  const text = document.getElementById('manualTextInput').value;
+
+  if (!text.trim()) {
+    alert('Please enter a consultation transcript first.');
+    return;
+  }
+
+  try {
+    app.ui.setStatus('processing', '🔍 Extracting medical data from text...');
+
+    // Extract medical data
+    const medicalData = await app.extractor.extract(text);
+    app.currentMedicalData = medicalData;
+    app.finalTranscript = text;
+
+    // Update UI with formatted content
+    app.ui.updateTranscript(`<div class="transcript-live">${app.formatTranscript(text)}</div>`);
+    app.ui.updateDashboard(medicalData);
+
+    // Save session to history
+    await app.history.saveSession({
+      transcript: text,
+      medicalData
+    });
+
+    app.ui.setStatus('ready', '✅ Report generated successfully from text');
+    app.ui.enablePrintButton(true);
+  } catch (error) {
+    console.error('Error processing text:', error);
+    app.ui.setStatus('error', `Error: ${error.message}`);
+    app.ui.showError(error.message);
+  }
+});
 
 // Start initialization
 app.initialize();
