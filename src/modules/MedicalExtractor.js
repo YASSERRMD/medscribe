@@ -6,6 +6,7 @@
  */
 
 import { ONNXLlmEngine } from './ONNXLlmEngine.js';
+import { getExtractionModelConfig } from '../config/models.js';
 
 export class MedicalExtractor {
   constructor() {
@@ -24,30 +25,47 @@ export class MedicalExtractor {
     if (this.isInitialized) return;
 
     console.log('Initializing Medical Extractor...');
+    this.useLLM = this.currentModel !== 'keyword';
 
-    if (this.currentModel === 'keyword') {
-      this.useLLM = false;
+    if (!this.useLLM) {
+      this.llm = null;
       this.isInitialized = true;
       console.log('Using keyword extraction mode');
       return;
     }
 
-    if (this.useLLM) {
-      try {
-        this.llm = new ONNXLlmEngine({
-          modelId: this.currentModel,
-          maxTokens: 2048,
-          temperature: 0.1,
-          onProgress: (percent, message) => {
-            if (onProgress) onProgress(percent, message);
-          }
-        });
+    const runtimeConfig = getExtractionModelConfig(this.currentModel);
+    const browserHasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
 
-        await this.llm.initialize();
-        console.log(`LLM Engine ready with model: ${this.currentModel}`);
-      } catch (error) {
-        console.warn('LLM initialization failed, falling back to keyword extraction:', error);
-        this.useLLM = false;
+    if (runtimeConfig?.requiresWebGPU && !browserHasWebGPU) {
+      console.warn(`WebGPU is required for ${this.currentModel}. Falling back to keyword extraction.`);
+      this.useLLM = false;
+      this.llm = null;
+      if (onProgress) {
+        onProgress(100, 'WebGPU unavailable. Using keyword extraction.');
+      }
+      this.isInitialized = true;
+      return;
+    }
+
+    try {
+      this.llm = new ONNXLlmEngine({
+        ...runtimeConfig,
+        maxTokens: 2048,
+        temperature: 0.1,
+        onProgress: (percent, message) => {
+          if (onProgress) onProgress(percent, message);
+        }
+      });
+
+      await this.llm.initialize();
+      console.log(`LLM Engine ready with model: ${runtimeConfig?.modelId || this.currentModel}`);
+    } catch (error) {
+      console.warn('LLM initialization failed, falling back to keyword extraction:', error);
+      this.useLLM = false;
+      this.llm = null;
+      if (onProgress) {
+        onProgress(100, 'Model unavailable. Using keyword extraction.');
       }
     }
 

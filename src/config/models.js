@@ -39,6 +39,52 @@ export const MODEL_CONFIG = {
   },
 };
 
+export const EXTRACTION_MODEL_OPTIONS = {
+  'LiquidAI/LFM2.5-1.2B-Instruct-ONNX': {
+    modelId: 'LiquidAI/LFM2.5-1.2B-Instruct-ONNX',
+    subfolder: 'onnx',
+    modelFileName: 'model_q4',
+    dtype: 'q4',
+    preferredDevice: 'webgpu',
+    requiresWebGPU: true,
+  },
+  'Xenova/Qwen2.5-1.5B-Instruct': {
+    modelId: 'onnx-community/Qwen2.5-1.5B-Instruct',
+    subfolder: 'onnx',
+    modelFileName: 'model_q4',
+    dtype: 'q4',
+    preferredDevice: 'webgpu',
+  },
+  'Xenova/Phi-3-mini-4k-instruct': {
+    modelId: 'Xenova/Phi-3-mini-4k-instruct',
+    subfolder: 'onnx',
+    modelFileName: 'model_q4',
+    dtype: 'q4',
+    preferredDevice: 'webgpu',
+  },
+  'Xenova/TinyLlama-1.1B-chat': {
+    modelId: 'Xenova/TinyLlama-1.1B-Chat-v1.0',
+    subfolder: 'onnx',
+    modelFileName: 'model_q4',
+    dtype: 'q4',
+    preferredDevice: 'webgpu',
+  },
+};
+
+export function getExtractionModelConfig(modelId) {
+  if (modelId === 'keyword') {
+    return null;
+  }
+
+  return EXTRACTION_MODEL_OPTIONS[modelId] || {
+    modelId,
+    subfolder: 'onnx',
+    modelFileName: 'model_q4',
+    dtype: 'q4',
+    preferredDevice: 'webgpu',
+  };
+}
+
 /**
  * Medical extraction system prompt
  * Instructs the LLM to return structured JSON
