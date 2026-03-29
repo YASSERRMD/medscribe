@@ -42,7 +42,6 @@ export class UIManager {
   enableControls(enabled) {
     this.startBtn.disabled = !enabled;
     this.stopBtn.disabled = true;
-    // Print button state depends on whether there's data (handled separately)
   }
 
   /**
@@ -77,7 +76,7 @@ export class UIManager {
    * @param {Object} medicalData - Structured medical data
    */
   updateDashboard(medicalData) {
-    // Update each widget
+    // Update each widget with HTML rendering
     this.setWidgetContent(this.widgets.incident, medicalData.incident_record);
     this.renderPrescription(medicalData.prescription);
     this.renderList(this.widgets.lab, medicalData.lab_recommendations);
@@ -88,7 +87,7 @@ export class UIManager {
   }
 
   /**
-   * Set widget content
+   * Set widget content with HTML support
    * @param {HTMLElement} widget - Widget element
    * @param {string} content - Content to display
    */
@@ -96,8 +95,29 @@ export class UIManager {
     if (!content || content.trim() === '') {
       widget.innerHTML = '<div class="placeholder">No information available</div>';
     } else {
-      widget.textContent = content;
+      // Convert text to HTML with formatting
+      const html = this.textToHtml(content);
+      widget.innerHTML = html;
     }
+  }
+
+  /**
+   * Convert text to HTML with basic formatting
+   * @param {string} text - Plain text
+   * @returns {string} HTML with formatting
+   */
+  textToHtml(text) {
+    // Escape HTML first
+    let html = this.escapeHtml(text);
+
+    // Convert newlines to <br>
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = html.replace(/\n/g, '<br>');
+
+    // Wrap in paragraph
+    html = `<p>${html}</p>`;
+
+    return html;
   }
 
   /**

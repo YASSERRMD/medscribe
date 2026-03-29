@@ -1,20 +1,20 @@
 /**
  * Speech-to-Text Module
  *
- * Transcribes audio using LFM2.5-Audio-1.5B model
+ * Transcribes audio using Whisper model via Transformers.js
  * Runs entirely in-browser via WebGPU/WASM
  */
 
 import { pipeline, env } from '@huggingface/transformers';
-import { MODEL_CONFIG, ModelCache } from '../config/models.js';
 
-// Disable remote model loading (we handle caching ourselves)
-env.allowLocalModels = true;
+// Configure Transformers.js
+env.allowLocalModels = false; // Allow remote model loading
+env.useBrowserCache = true; // Use browser cache
 
 export class SpeechToText {
   constructor() {
-    this.config = MODEL_CONFIG.stt;
-    this.cache = new ModelCache(MODEL_CONFIG);
+    // Use Xenon/whisper-tiny - a model that actually works with Transformers.js
+    this.modelId = 'Xenova/whisper-tiny';
     this.asr = null;
     this.isInitialized = false;
   }
@@ -22,33 +22,21 @@ export class SpeechToText {
   async initialize() {
     if (this.isInitialized) return;
 
-    console.log('Initializing STT model...');
+    console.log('Initializing STT model (Whisper Tiny)...');
 
     try {
-      // Monkey-patch fetch to use our cache
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = async (...args) => {
-        const url = args[0];
-        if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
-          return this.cache.fetchWithCache(url);
-        }
-        return originalFetch(...args);
-      };
-
-      // Load ASR pipeline
-      this.asr = await pipeline('automatic-speech-recognition', this.config.modelId, {
-        quantization: this.config.quantization,
+      // Load ASR pipeline with progress callback
+      this.asr = await pipeline('automatic-speech-recognition', this.modelId, {
         progress_callback: (progress) => {
           if (progress.status === 'downloading') {
             console.log(`[STT] Downloading: ${progress.file} (${progress.progress.toFixed(1)}%)`);
           } else if (progress.status === 'loading') {
             console.log(`[STT] Loading: ${progress.file}`);
+          } else if (progress.status === 'done') {
+            console.log(`[STT] Model loaded successfully`);
           }
         },
       });
-
-      // Restore original fetch
-      globalThis.fetch = originalFetch;
 
       this.isInitialized = true;
       console.log('STT model initialized successfully');
@@ -71,62 +59,28 @@ export class SpeechToText {
     console.log('Transcribing audio...');
 
     try {
-      // Decode audio to required format
-      const audioContext = new AudioContext({
-        sampleRate: this.config.sampleRate,
+      // Convert blob to audio URL for the pipeline
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      // Run transcription
+      const result = await this.asr(audioUrl, {
+        chunk_length_s: 30,
+        stride_length_s: 5,
+        language: 'english',
+        task: 'transcribe',
+        return_timestamps: false,
       });
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-      // Get audio data as float32 array
-      const audioData = audioBuffer.getChannelData(0);
+      // Clean up object URL
+      URL.revokeObjectURL(audioUrl);
 
-      // For long audio, chunk it to avoid memory issues
-      const samplesPerChunk = this.config.sampleRate * this.config.chunkDuration;
-      const chunks = [];
+      const transcript = result?.text || '';
 
-      for (let i = 0; i < audioData.length; i += samplesPerChunk) {
-        const chunk = audioData.slice(i, i + samplesPerChunk);
-        chunks.push(chunk);
-      }
-
-      console.log(`Processing ${chunks.length} chunk(s)...`);
-
-      // Transcribe each chunk
-      const transcripts = [];
-      for (let i = 0; i < chunks.length; i++) {
-        console.log(`Transcribing chunk ${i + 1}/${chunks.length}...`);
-
-        // Convert Float32Array to WAV-like format
-        const wavData = this.float32ToWav(chunks[i]);
-
-        const result = await this.asr(wavData, {
-          chunk_length_s: this.config.chunkDuration,
-          stride_length_s: 5,
-          language: this.config.language,
-          task: 'transcribe',
-        });
-
-        transcripts.push(result.text || '');
-      }
-
-      // Combine transcripts
-      const fullTranscript = transcripts.join(' ').trim();
-
-      console.log('Transcription complete');
-      return fullTranscript;
+      console.log('Transcription complete:', transcript.substring(0, 100) + '...');
+      return transcript;
     } catch (error) {
       console.error('Transcription error:', error);
       throw new Error(`Transcription failed: ${error.message}`);
     }
-  }
-
-  /**
-   * Convert Float32Array to WAV format for the model
-   */
-  float32ToWav(float32Array) {
-    // The model expects float32 audio data directly
-    // No conversion needed - return as-is
-    return float32Array;
   }
 }

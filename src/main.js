@@ -23,26 +23,73 @@ class MedScribe {
     this.audioBlob = null;
     this.currentTranscript = '';
     this.currentMedicalData = null;
+
+    // Loading screen elements
+    this.loadingOverlay = document.getElementById('loadingOverlay');
+    this.progressFill = document.getElementById('progressFill');
+    this.progressText = document.getElementById('progressText');
+  }
+
+  updateProgress(percent, message) {
+    if (this.progressFill) {
+      this.progressFill.style.width = `${percent}%`;
+    }
+    if (this.progressText) {
+      this.progressText.textContent = message;
+    }
+  }
+
+  hideLoadingScreen() {
+    if (this.loadingOverlay) {
+      this.loadingOverlay.classList.add('hidden');
+    }
   }
 
   async initialize() {
-    this.ui.setStatus('ready', 'Loading AI models... (this may take a minute on first load)');
+    this.updateProgress(10, 'Starting...');
 
     try {
-      // Initialize models and history in parallel
+      // Initialize models sequentially with progress updates
+      this.updateProgress(20, 'Initializing Speech-to-Text model...');
       this.stt = new SpeechToText();
-      this.extractor = new MedicalExtractor();
 
-      await Promise.all([
-        this.stt.initialize(),
-        this.extractor.initialize(),
-        this.history.initialize()
-      ]);
+      // Track STT loading progress
+      const originalLog = console.log;
+      console.log = (...args) => {
+        const message = args.join(' ');
+        if (message.includes('[STT]')) {
+          if (message.includes('Downloading')) {
+            const match = message.match(/([\d.]+)%/);
+            if (match) {
+              const progress = 20 + (parseInt(match[1]) * 0.3);
+              this.updateProgress(progress, message);
+            }
+          } else if (message.includes('loaded successfully')) {
+            this.updateProgress(50, 'STT model loaded');
+          }
+        }
+        originalLog.apply(console, args);
+      };
+
+      await this.stt.initialize();
+
+      console.log = originalLog;
+      this.updateProgress(60, 'Initializing Medical Extractor...');
+
+      this.extractor = new MedicalExtractor();
+      await this.extractor.initialize();
+
+      this.updateProgress(80, 'Loading session history...');
+      await this.history.initialize();
+
+      this.updateProgress(100, 'Ready!');
+      setTimeout(() => this.hideLoadingScreen(), 500);
 
       this.ui.setStatus('ready', 'Ready - Models loaded successfully');
       this.ui.enableControls(true);
     } catch (error) {
       console.error('Initialization error:', error);
+      this.updateProgress(0, `Error: ${error.message}`);
       this.ui.setStatus('error', `Error: ${error.message}`);
     }
   }
@@ -109,7 +156,7 @@ class MedScribe {
   }
 }
 
-// Initialize app
+// Initialize app when DOM is ready
 const app = new MedScribe();
 
 // Wire up event listeners
