@@ -1,8 +1,14 @@
 # MedScribe
 
-> Privacy-First AI Medical Consultation App - 100% Browser-Based, Zero Server
+> Privacy-First AI Medical Scribe for Doctors - 100% Browser-Based, Zero Server
 
-MedScribe is a fully local AI-powered medical consultation assistant that runs entirely in your browser. Record doctor-patient conversations, and get instant transcriptions with structured medical data extraction - all offline, all private.
+**MedScribe is a professional medical tool designed exclusively for doctors and healthcare professionals.**
+
+MedScribe is a fully local AI-powered medical scribe that runs entirely in your browser. Record your patient consultations, and get instant transcriptions with structured medical data extraction - all offline, all private.
+
+## ⚠️ For Medical Professionals Only
+
+MedScribe is intended for use by **licensed doctors and healthcare professionals** only. It is designed to assist medical professionals during patient consultations by automating documentation tasks.
 
 ## Features
 
