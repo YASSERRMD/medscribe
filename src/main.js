@@ -11,6 +11,8 @@ import { UIManager } from './modules/UIManager.js';
 import { SessionHistory } from './modules/SessionHistory.js';
 import { PrintManager } from './modules/PrintManager.js';
 
+const DEFAULT_EXTRACTION_MODEL = 'LiquidAI/LFM2.5-1.2B-Instruct-ONNX';
+
 class MedScribe {
   constructor() {
     this.ui = new UIManager();
@@ -58,15 +60,11 @@ class MedScribe {
       // Initialize STT (Web Speech API - instant)
       await this.stt.initialize();
 
-      // Get selected model from dropdown
-      const modelSelect = document.getElementById('modelSelect');
-      const selectedModel = modelSelect ? modelSelect.value : 'LiquidAI/LFM2.5-1.2B-Instruct-ONNX';
-
       // Initialize MedicalExtractor with LLM (includes model download)
       this.updateProgress(60, 'Initializing Medical Extractor...');
       await this.extractor.initialize((percent, message) => {
         this.updateProgress(60 + Math.floor(percent * 0.3), message);
-      }, selectedModel);
+      }, DEFAULT_EXTRACTION_MODEL);
 
       // Initialize session history
       this.updateProgress(90, 'Loading session history...');
@@ -98,9 +96,9 @@ class MedScribe {
         this.recordingWave.classList.add('active');
       }
 
-      this.ui.setStatus('recording', '🎤 Recording... Speak now');
+      this.ui.setStatus('recording', 'Recording in progress');
       this.ui.enableControls(false);
-      this.ui.updateTranscript('<div class="placeholder">🎤 Listening... Start speaking...</div>');
+      this.ui.updateTranscript('<div class="placeholder">Listening. Start speaking to capture the consultation transcript.</div>');
 
       // Start recording
       await this.recorder.start();
@@ -125,7 +123,7 @@ class MedScribe {
 
   async endConsultation() {
     try {
-      this.ui.setStatus('processing', '⏹️ Stopping recording...');
+      this.ui.setStatus('processing', 'Finalizing the session...');
 
       // Stop live transcription
       await this.stt.stopLiveTranscription();
@@ -145,7 +143,7 @@ class MedScribe {
 
       await this.generateReportFromTranscript(this.finalTranscript, {
         showAudioPlayer: true,
-        successMessage: '✅ Report generated successfully'
+        successMessage: 'Report generated successfully'
       });
     } catch (error) {
       console.error('Error processing consultation:', error);
@@ -191,8 +189,8 @@ class MedScribe {
 
     if (this.toggleManualBtn) {
       this.toggleManualBtn.textContent = visible
-        ? '✖ Hide Manual Input'
-        : '📝 Manual Transcript Input';
+        ? 'Hide Manual Entry'
+        : 'Manual Entry';
     }
 
     if (visible) {
@@ -211,11 +209,11 @@ class MedScribe {
   async generateReportFromTranscript(transcript, options = {}) {
     const {
       showAudioPlayer = false,
-      successMessage = '✅ Report generated successfully'
+      successMessage = 'Report generated successfully'
     } = options;
     const normalizedTranscript = transcript.trim();
 
-    this.ui.setStatus('processing', '🔍 Extracting medical data...');
+    this.ui.setStatus('processing', 'Extracting medical data...');
     this.finalTranscript = normalizedTranscript;
     this.liveTranscript = normalizedTranscript;
 
@@ -280,7 +278,7 @@ document.getElementById('processTextBtn')?.addEventListener('click', async () =>
 
   try {
     await app.generateReportFromTranscript(text, {
-      successMessage: '✅ Report generated successfully from manual text'
+      successMessage: 'Report generated successfully from manual text'
     });
   } catch (error) {
     console.error('Error processing text:', error);
@@ -293,38 +291,6 @@ document.getElementById('clearManualTextBtn')?.addEventListener('click', () => {
   if (app.manualTextInput) {
     app.manualTextInput.value = '';
     app.manualTextInput.focus();
-  }
-});
-
-// Model selection change handler
-document.getElementById('modelSelect')?.addEventListener('change', async (e) => {
-  const newModel = e.target.value;
-
-  if (app.extractor.isInitialized) {
-    const confirmed = confirm(
-      'Changing the model will reinitialize the extraction engine. Continue?'
-    );
-
-    if (confirmed) {
-      app.ui.setStatus('processing', '🔄 Switching model...');
-      app.ui.enableControls(false);
-
-      try {
-        await app.extractor.dispose();
-
-        await app.extractor.initialize((percent, message) => {
-          app.ui.setStatus('processing', `🔄 Loading model: ${Math.floor(percent)}%`);
-        }, newModel);
-
-        app.ui.setStatus('ready', `✅ Model switched to ${e.target.options[e.target.selectedIndex].text}`);
-      } catch (error) {
-        app.ui.setStatus('error', `Failed to switch model: ${error.message}`);
-      }
-
-      app.ui.enableControls(true);
-    } else {
-      e.target.value = app.extractor.currentModel;
-    }
   }
 });
 
