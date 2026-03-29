@@ -10,15 +10,16 @@ export default defineConfig({
     exclude: ['onnxruntime-web'],
   },
   server: {
+    // Remove COOP/COEP headers - they block HuggingFace model downloads
+    // These headers are only needed for WebGPU with shared memory
+    // Whisper works fine on WASM without them
     headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Access-Control-Allow-Origin': '*',
     },
   },
   preview: {
     headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Access-Control-Allow-Origin': '*',
     },
   },
 });
