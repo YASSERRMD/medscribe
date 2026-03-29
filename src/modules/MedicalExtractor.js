@@ -120,21 +120,44 @@ export class MedicalExtractor {
    */
   buildMedicalPrompt(transcript) {
     return `<|im_start|>system
-You are a medical consultation assistant. Extract structured information from the consultation transcript below.
-Respond with valid JSON only. No markdown, no explanations, just the JSON object.
+You are an expert medical consultation assistant. Extract structured medical information from the consultation transcript.
 
-Extract the following fields:
-- incident_record: A detailed paragraph describing the patient's chief complaint, history, and symptoms
-- prescription: Array of objects with drug, dose, frequency, duration
-- lab_recommendations: Array of recommended lab tests
-- radiology_recommendations: Array of recommended imaging studies
-- treatment_plan: Detailed paragraph describing the treatment approach
-- diet_advice: Array of dietary recommendations
-- summary: Comprehensive consultation summary paragraph
+IMPORTANT RULES:
+1. Respond with valid JSON only - no markdown, no explanations, no code fences
+2. Extract only information explicitly mentioned in the transcript
+3. Use professional medical terminology
+4. For medication names, use generic names unless brand name is specifically mentioned
+5. If a field is not mentioned, use empty string [] or "" as appropriate
+6. incident_record, treatment_plan, and summary should be detailed paragraphs
+7. prescription should be an array of objects with exact structure: [{"drug": "", "dose": "", "frequency": "", "duration": ""}]
+
+JSON STRUCTURE REQUIRED:
+{
+  "incident_record": "Detailed paragraph including: chief complaint, history of present illness, symptoms, duration, onset",
+  "prescription": [
+    {"drug": "medication name", "dose": "e.g., 500mg", "frequency": "e.g., twice daily", "duration": "e.g., 5 days"}
+  ],
+  "lab_recommendations": ["Complete Blood Count", "Fasting Blood Sugar", ...],
+  "radiology_recommendations": ["Chest X-ray", "CT Scan", ...],
+  "treatment_plan": "Detailed paragraph explaining the treatment approach, primary interventions, and management strategy",
+  "diet_advice": ["Specific dietary recommendation 1", "Specific dietary recommendation 2", ...],
+  "summary": "Comprehensive summary covering: patient presentation, key findings, assessment, and plan"
+}
+
+EXAMPLES:
+- For doses: use formats like "500mg", "10mg", "5ml"
+- For frequency: use "once daily", "twice daily", "three times daily", "every 8 hours", "as needed"
+- For duration: use "5 days", "1 week", "2 weeks", "until completion"
+- For labs: use specific test names like "Complete Blood Count (CBC)", "Fasting Blood Sugar", "Lipid Profile"
+- For radiology: use specific studies like "Chest X-ray", "CT Scan abdomen", "MRI brain"
 <|im_end|>
 <|im_start|>user
-Consultation Transcript:
+Please analyze this medical consultation transcript and extract structured medical data:
+
+TRANSCRIPT:
 ${transcript}
+
+Provide the extracted information as JSON following the structure above.
 <|im_end|>
 <|im_start|>assistant
 `;
@@ -145,10 +168,16 @@ ${transcript}
    */
   parseLLMResponse(response) {
     try {
+      // Remove markdown code fences if present
+      let cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
       // Try to extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+
+        // Validate structure
+        return this.validateAndNormalize(parsed);
       }
 
       // If no JSON found, return empty structure
@@ -156,8 +185,49 @@ ${transcript}
       return {};
     } catch (error) {
       console.error('Failed to parse LLM JSON response:', error);
+      console.log('Response was:', response);
       return {};
     }
+  }
+
+  /**
+   * Validate and normalize extracted data
+   */
+  validateAndNormalize(data) {
+    const normalized = {
+      incident_record: this.ensureString(data.incident_record),
+      prescription: this.ensureArray(data.prescription).map(med => ({
+        drug: this.ensureString(med?.drug),
+        dose: this.ensureString(med?.dose),
+        frequency: this.ensureString(med?.frequency),
+        duration: this.ensureString(med?.duration)
+      })).filter(med => med.drug), // Remove empty prescriptions
+      lab_recommendations: this.ensureArray(data.lab_recommendations).filter(Boolean),
+      radiology_recommendations: this.ensureArray(data.radiology_recommendations).filter(Boolean),
+      treatment_plan: this.ensureString(data.treatment_plan),
+      diet_advice: this.ensureArray(data.diet_advice).filter(Boolean),
+      summary: this.ensureString(data.summary)
+    };
+
+    return normalized;
+  }
+
+  /**
+   * Ensure value is a string
+   */
+  ensureString(value) {
+    if (typeof value === 'string') return value.trim();
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  }
+
+  /**
+   * Ensure value is an array
+   */
+  ensureArray(value) {
+    if (Array.isArray(value)) return value;
+    if (value === null || value === undefined) return [];
+    return [value];
   }
 
   /**
